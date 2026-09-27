@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useOptimistic,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  useTransition,
-} from "react";
+import { Fragment, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { formatDay, numberFormat, useToday } from "@/lib/date";
 import { addWorkoutAction, removeWorkoutAction, updateWorkoutAction } from "./actions";
 import {
   COMMON_EXERCISES,
@@ -22,33 +14,6 @@ import {
   type WorkoutInput,
   type WorkoutSet,
 } from "./types";
-
-const noopSubscribe = () => () => {};
-// "en-CA" formats as YYYY-MM-DD in the user's local timezone.
-const localToday = () => new Date().toLocaleDateString("en-CA");
-
-/** Today's date on the client; "" on the server, which can't know the user's timezone. */
-function useToday(): string {
-  return useSyncExternalStore(noopSubscribe, localToday, () => "");
-}
-
-const numberFormat = new Intl.NumberFormat("vi-VN");
-const dayFormat = new Intl.DateTimeFormat("vi-VN", {
-  weekday: "long",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-
-function formatDay(date: string, today: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const day = new Date(y, m - 1, d);
-  const [ty, tm, td] = today.split("-").map(Number);
-  const diffDays = Math.round((new Date(ty, tm - 1, td).getTime() - day.getTime()) / 86_400_000);
-  if (diffDays === 0) return "Hôm nay";
-  if (diffDays === 1) return "Hôm qua";
-  return dayFormat.format(day);
-}
 
 /** An entry as shown on screen; `pending` = change not yet confirmed by the server. */
 type DisplayEntry = WorkoutEntry & { pending?: boolean };

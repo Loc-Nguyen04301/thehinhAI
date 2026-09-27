@@ -101,7 +101,7 @@ src/
     page.tsx                # Trang chủ (hero + slogan + 3 tính năng + bài mới)
     login/, register/       # Đăng nhập / đăng ký (?next=/duong-dan để quay lại)
     workouts/page.tsx       # Nhật ký tập (cần đăng nhập)
-    meals/page.tsx          # Đo kcal AI (cần đăng nhập)
+    meals/page.tsx          # Đo kcal AI + Nhật ký ăn bên dưới (cần đăng nhập)
     admin/                  # Trang quản trị: users/, users/[id]/ (chỉ staff)
     blog/page.tsx, blog/[slug]/page.tsx
     api/auth/[...all]/route.ts  # Toàn bộ endpoint Better Auth
@@ -113,9 +113,11 @@ src/
     admin/                  # users-list, user-detail (server), user-actions (client), actions.ts (Server Actions), badges
     workouts/               # types.ts (zod), repository.ts (MongoDB), actions.ts (Server Actions), workout-log.tsx (server) + workout-log-client.tsx
     meals/                  # schema.ts (zod), analyze-meal.ts (server), meal-analyzer.tsx, meal-result.tsx, resize-image.ts, drop-image.ts (đọc ảnh kéo thả)
+    meal-logs/              # Nhật ký ăn (không AI): types.ts (zod), repository.ts (MongoDB), actions.ts (Server Actions), meal-log.tsx (server) + meal-log-client.tsx
   lib/
     site.ts                 # Tên, slogan, logo, menu
     theme.ts                # Giao diện sáng/tối: key localStorage, script chống nháy, setTheme()
+    date.ts                 # useToday(), formatDay() ("Hôm nay"/"Hôm qua"…), formatShortDay(), addDays(), numberFormat — dùng chung cho các nhật ký (chỉ import từ client)
     permissions.ts          # Role & quyền (dùng chung server + client)
     auth.ts                 # Cấu hình Better Auth (server) — getAuth()
     auth-client.ts          # authClient cho component "use client" (useSession, signIn…)
@@ -151,6 +153,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 | Collection | Trường | Index | Định nghĩa |
 | --- | --- | --- | --- |
 | `workouts` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `exercise`, `muscleGroup`, `sets` (mảng 1–`MAX_SETS` (= 20) phần tử `{ reps, weightKg }`, mỗi hiệp một phần tử, `weightKg: 0` = tự trọng), `note?`, `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `WorkoutDoc` trong `features/workouts/repository.ts`; ràng buộc giá trị: `WorkoutInputSchema` (zod) trong `types.ts` |
+| `mealLogs` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `name` (tên món), `grams` (số nguyên 1–5000), `kcal` (số nguyên 0–5000, người dùng tự nhập), `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `MealLogDoc` trong `features/meal-logs/repository.ts`; ràng buộc giá trị: `MealLogInputSchema` (zod) trong `types.ts` |
 
 - Thêm collection mới: khai báo kiểu document + hàm truy vấn trong `features/<tên>/repository.ts` (`import "server-only"`), schema zod cho input trong `types.ts`, tạo index ngay trong repository (xem `workouts()`), rồi bổ sung bảng trên.
 - Ví dụ truy vấn trên Atlas (Aggregations): tổng số hiệp và khối lượng tập theo user — `$unwind` mảng `sets` để tính trên từng hiệp
@@ -196,7 +199,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - **Sửa bài tập:** chạm vào một bài trong "Lịch sử tập" → mở **popup** "Sửa bài tập" (`EditWorkoutDialog`, thẻ `<dialog>` gốc + `showModal()`), điền sẵn dữ liệu cũ. Không sửa tại chỗ trong danh sách — dễ nhầm với form "Ghi bài tập". Đóng bằng ×, Huỷ, Esc hoặc bấm ra ngoài; nền phía sau bị khoá (không bấm/cuộn được, CSS `html:has(dialog[open])` trong `globals.css`), đóng xong focus quay về bài vừa chạm.
 - Form tạo mới và form sửa dùng chung component `WorkoutForm` (có `initial` = chế độ sửa). Xoá ghi chú khi sửa sẽ `$unset` trường `note`.
 - Popup/hộp thoại mới trong dự án: dùng `<dialog>` + `showModal()` như `EditWorkoutDialog`, không tự dựng lớp phủ bằng `div`.
-- **"Hôm nay" chỉ tính ở client** (`useToday()` trong `workout-log-client.tsx`, theo múi giờ người dùng); server không biết múi giờ của người dùng. Không dùng `new Date()` ở server để lấy ngày hiện tại.
+- **"Hôm nay" chỉ tính ở client** (`useToday()` trong `lib/date.ts`, theo múi giờ người dùng); server không biết múi giờ của người dùng. Không dùng `new Date()` ở server để lấy ngày hiện tại.
 - Staff có quyền `workout:view-any` xem nhật ký của user ở `/admin/users/[id]` (component `WorkoutHistoryReadOnly`).
 
 ### 2. Đo kcal bằng ảnh (`/meals`)
@@ -210,7 +213,16 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - Lỗi hiển thị cho người dùng: ném `MealAnalysisError(message, status)`; lỗi SDK (rate limit, 5xx) được `mealErrorResponse()` chuyển thành câu tiếng Việt.
 - Khi thêm field kết quả: sửa **2 chỗ** — `schema.ts` (zod) và UI `meal-result.tsx`.
 
-### 3. Blog (`/blog`)
+### 3. Nhật ký ăn (`/meals`, phần dưới "Đo kcal bằng ảnh")
+- **Không dùng AI**: người dùng tự nhập mỗi món = ngày, tên món, khối lượng (g), kcal. Hệ thống chỉ cộng **tổng kcal theo ngày** (`totalKcal()` trong `types.ts`). Vì số liệu do người dùng tự nhập nên **không** kèm câu "AI ước tính".
+- Cùng khuôn với Nhật ký tập: `meal-log.tsx` (Server Component) đọc DB → `MealLogClient`; Server Actions `addMealLogAction` / `updateMealLogAction` / `removeMealLogAction` (kiểm tra session + zod) → `refresh()`; `useOptimistic` cho cập nhật tức thì; sửa bằng popup `EditMealLogDialog` (`<dialog>`); mọi truy vấn lọc theo `userId`.
+- Giao diện: thẻ "Tổng kcal hôm nay" trên cùng → form "Ghi món ăn" (lưu xong giữ ngày, xoá các ô còn lại) → "Lịch sử ăn uống" nhóm theo ngày, mỗi ngày ghi "N món · Tổng X kcal". Ô tên món gợi ý các món đã ghi trước đó (`<datalist>`).
+- **Lọc lịch sử theo khoảng ngày** ("Từ ngày – Đến ngày" + nút Xem, component `RangeFilter`): khoảng nằm trên URL `/meals?from=YYYY-MM-DD&to=YYYY-MM-DD` (đổi bằng `router.push(..., { scroll: false })` trong `useTransition` → nút hiện "Đang tải…"). Thẻ trên đầu lịch sử hiện **tổng kcal của khoảng**, số món, số ngày có ghi; danh sách chỉ hiện các ngày trong khoảng.
+  - Server (`meal-log.tsx`) kiểm tra khoảng bằng `DateRangeSchema` (from ≤ to, tối đa `MAX_RANGE_DAYS` = 366 ngày; sai → coi như không lọc), tải **các món trong khoảng** (tối đa 3000, vượt thì báo tổng có thể thiếu) **gộp với 300 món gần nhất** (cần cho "Tổng kcal hôm nay" và gợi ý tên món).
+  - Không có `from`/`to` → mặc định **7 ngày gần nhất**, tính ở client (server không biết "hôm nay" của người dùng) và lọc trên 300 món gần nhất.
+- Lưu ở collection `mealLogs` (xem mục **Cơ sở dữ liệu**).
+
+### 4. Blog (`/blog`)
 - Thêm bài: tạo `content/blog/<slug-khong-dau>.md` với frontmatter:
   ```yaml
   ---
@@ -240,7 +252,8 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - [x] Tài khoản người dùng + MongoDB + phân quyền (user / cs / admin)
 - [ ] Gửi email (VD Resend): quên mật khẩu, xác minh email
 - [ ] Nhật ký thao tác của staff (audit log: ai khoá ai, đổi role khi nào)
-- [ ] Lưu lịch sử bữa ăn, tổng kcal/ngày, mục tiêu kcal & protein
+- [x] Nhật ký ăn thủ công + tổng kcal/ngày (không AI)
+- [ ] Mục tiêu kcal & protein mỗi ngày
 - [ ] Biểu đồ tiến bộ (khối lượng tập theo tuần, cân nặng)
 - [ ] AI gợi ý lịch tập / nhận xét buổi tập từ nhật ký
 - [ ] Giới hạn số lần đo kcal mỗi user/ngày (đã bắt đăng nhập, nhưng 1 tài khoản vẫn gọi được không giới hạn)
