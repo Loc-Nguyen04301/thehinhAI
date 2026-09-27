@@ -8,6 +8,7 @@ import {
 } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
+import type { MongoClient } from "mongodb";
 import { getDb, getMongoClient } from "@/lib/db";
 import { ac, canManageUser, DEFAULT_ROLE, roles } from "@/lib/permissions";
 import { siteConfig } from "@/lib/site";
@@ -26,6 +27,24 @@ const TARGETED_ADMIN_PATHS = new Set([
   "/admin/impersonate-user",
 ]);
 
+/**
+ * Origins allowed to call the auth API besides BETTER_AUTH_URL's: BETTER_AUTH_TRUSTED_ORIGINS,
+ * plus on Vercel this app's own URLs (Vercel system env vars, host only): the unique URL of
+ * each deployment, the git branch URL and the production domain. Without them, opening a
+ * deployment URL fails with INVALID_ORIGIN. Never trust all of *.vercel.app (other people's apps).
+ */
+function trustedOrigins(): string[] {
+  const configured = process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [];
+  const vercelHosts = [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ].filter((host): host is string => Boolean(host));
+  return [...configured, ...vercelHosts.map((host) => `https://${host}`)]
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 /** Google sign-in is offered only when its OAuth credentials are configured. */
 export function isGoogleEnabled(): boolean {
   return Boolean(
@@ -41,9 +60,7 @@ function createAuth() {
     appName: siteConfig.name,
     // BETTER_AUTH_SECRET and BETTER_AUTH_URL are read from the environment.
     database: mongodbAdapter(getDb(), { client: getMongoClient() }),
-    trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    trustedOrigins: trustedOrigins(),
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
@@ -102,10 +119,14 @@ function createAuth() {
 
 export type Auth = ReturnType<typeof createAuth>;
 
-let instance: Auth | undefined;
+let instance: { auth: Auth; client: MongoClient } | undefined;
 
-/** Created lazily so `next build` doesn't need MONGODB_URI / BETTER_AUTH_SECRET. */
+/**
+ * Created lazily so `next build` doesn't need MONGODB_URI / BETTER_AUTH_SECRET.
+ * Rebuilt when lib/db replaced a closed MongoClient (the old instance holds the dead one).
+ */
 export function getAuth(): Auth {
-  instance ??= createAuth();
-  return instance;
+  const client = getMongoClient();
+  if (instance?.client !== client) instance = { auth: createAuth(), client };
+  return instance.auth;
 }

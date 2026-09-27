@@ -88,6 +88,14 @@ npm run set-role -- <email> <user|cs|admin>   # cấp role (VD admin đầu tiê
 Biến môi trường: copy `.env.example` → `.env.local` (giải thích từng biến trong file đó). Bắt buộc: `MONGODB_URI`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`. Không bắt buộc: `GOOGLE_CLIENT_ID/SECRET` (thiếu thì ẩn nút Google), `ANTHROPIC_API_KEY` (thiếu thì chỉ Đo kcal lỗi).
 `next build` **không cần** biến môi trường nào: DB và auth được khởi tạo lười (`getMongoClient()`, `getAuth()`).
 
+### Deploy (Vercel)
+- Production: **https://thehinh-ai.vercel.app** (project `thehinh-ai`, team `locnguyen4301s-projects`, deploy tự động từ GitHub). Xem log / biến môi trường: `vercel logs`, `vercel env ls` (Vercel CLI, đã `vercel link`).
+- Env Production: `BETTER_AUTH_URL=https://thehinh-ai.vercel.app` (không phải localhost), cùng các biến bắt buộc ở trên. Đổi env xong phải **redeploy** mới có hiệu lực.
+- **Atlas → Network Access** phải cho phép Vercel (`0.0.0.0/0`, Vercel Hobby không có IP cố định). Thiếu → đăng nhập 500, log `MongoServerSelectionError … SSL alert number 80`.
+- Driver MongoDB đóng hẳn client khi kết nối lần đầu thất bại (sau đó mọi truy vấn báo `MongoTopologyClosedError`). `getMongoClient()` bắt sự kiện `topologyClosed` để bỏ client đó, `getAuth()` tự tạo lại khi client đổi. Đừng giữ `MongoClient`/`Db` lâu dài ở chỗ khác — luôn lấy qua `getMongoClient()` / `getDb()`.
+- Better Auth chỉ nhận request (POST có cookie) từ origin được tin: `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, và **tự động** các URL Vercel của chính app (`VERCEL_URL` = URL từng lần deploy, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`) — hàm `trustedOrigins()` trong `lib/auth.ts`. Thiếu → `403 INVALID_ORIGIN`. Không bao giờ thêm wildcard `*.vercel.app` (tin cả app của người khác → CSRF).
+- Đăng nhập Google trên Vercel: thêm `https://thehinh-ai.vercel.app/api/auth/callback/google` vào Authorized redirect URIs (URL deploy/preview đổi liên tục nên Google chỉ chạy trên domain production).
+
 ## Cấu trúc thư mục
 
 ```
