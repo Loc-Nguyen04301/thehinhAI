@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/* Brand tokens — see "Thương hiệu" in CLAUDE.md. Change colors here only. */
+:root {
+  --brand: #05A8FA;
+  --brand-light: #08CAFA;
+  --brand-dark: #0470F0;
+  --background: #000000;
+  --foreground: #FFFFFF;
+
+  /* Neutral greys on black (not brand colors) */
+  --card: #0E0E10;
+  --border: #27272A;
+  --muted: #A1A1AA;
+  --danger: #F87171;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-be-vietnam-pro);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Rendered Markdown for blog posts */
+@layer components {
+  .prose-blog {
+    @apply space-y-5 text-base leading-relaxed text-foreground/90;
+  }
+  .prose-blog h2 {
+    @apply pt-4 text-xl font-bold text-foreground;
+  }
+  .prose-blog h3 {
+    @apply pt-2 text-lg font-semibold text-foreground;
+  }
+  .prose-blog a {
+    @apply text-brand underline underline-offset-4 hover:text-brand-light;
+  }
+  .prose-blog ul {
+    @apply list-disc space-y-2 pl-6;
+  }
+  .prose-blog ol {
+    @apply list-decimal space-y-2 pl-6;
+  }
+  .prose-blog strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose-blog blockquote {
+    @apply border-l-4 border-brand pl-4 text-muted;
+  }
+  .prose-blog code {
+    @apply rounded bg-card px-1.5 py-0.5 text-sm;
+  }
+  .prose-blog table {
+    @apply w-full border-collapse text-sm;
+  }
+  .prose-blog th,
+  .prose-blog td {
+    @apply border border-border px-3 py-2 text-left;
+  }
+}
