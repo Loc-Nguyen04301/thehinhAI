@@ -33,14 +33,24 @@ export default async function HomePage() {
   return (
     <div className="space-y-14">
       <section className="flex flex-col items-center text-center">
+        {/* One logo per theme; CSS shows the right one. Eager: it's the largest thing above the fold. */}
         <Image
-          src={siteConfig.logo.src}
+          src={siteConfig.logo.light}
           alt={`Logo ${siteConfig.name}`}
           width={siteConfig.logo.width}
           height={siteConfig.logo.height}
-          priority
           sizes="(min-width: 768px) 320px, 256px"
-          className="h-auto w-64 md:w-80"
+          loading="eager"
+          className="h-auto w-64 md:w-80 dark:hidden"
+        />
+        <Image
+          src={siteConfig.logo.dark}
+          alt={`Logo ${siteConfig.name}`}
+          width={siteConfig.logo.width}
+          height={siteConfig.logo.height}
+          sizes="(min-width: 768px) 320px, 256px"
+          loading="eager"
+          className="hidden h-auto w-64 md:w-80 dark:block"
         />
         <Wordmark className="mt-3 text-5xl md:text-6xl" />
         <h1 className="mt-6 text-3xl font-extrabold leading-tight md:text-5xl">
@@ -56,7 +66,7 @@ export default async function HomePage() {
         <div className="mt-6 flex w-full max-w-sm flex-col gap-3 sm:flex-row">
           <Link
             href="/meals"
-            className="flex-1 rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-light active:bg-brand-dark"
+            className="flex-1 rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-hover active:bg-brand-dark"
           >
             Đo kcal bữa ăn
           </Link>
@@ -87,7 +97,7 @@ export default async function HomePage() {
         <section className="space-y-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-bold">Bài viết mới</h2>
-            <Link href="/blog" className="text-sm text-brand hover:text-brand-light">
+            <Link href="/blog" className="text-sm text-brand hover:text-brand-hover">
               Xem tất cả →
             </Link>
           </div>

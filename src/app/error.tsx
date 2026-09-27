@@ -9,7 +9,7 @@ export default function ErrorPage({ reset }: { error: Error & { digest?: string 
       <button
         type="button"
         onClick={reset}
-        className="rounded-xl bg-brand px-5 py-2.5 font-semibold text-background hover:bg-brand-light"
+        className="rounded-xl bg-brand px-5 py-2.5 font-semibold text-background hover:bg-brand-hover"
       >
         Thử lại
       </button>

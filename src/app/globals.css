@@ -1,24 +1,51 @@
 @import "tailwindcss";
 
-/* Brand tokens — see "Thương hiệu" in CLAUDE.md. Change colors here only. */
+/* Theme tokens — see "Thương hiệu" in CLAUDE.md. Change colors here only.
+   The theme is set on <html data-theme="dark|light"> by the inline script in layout.tsx. */
+
+/* Dark theme (default) */
 :root {
   --brand: #05A8FA;
   --brand-light: #08CAFA;
   --brand-dark: #0470F0;
+  --brand-hover: #08CAFA;
   --background: #000000;
   --foreground: #FFFFFF;
 
-  /* Neutral greys on black (not brand colors) */
+  /* Neutral greys (not brand colors) */
   --card: #0E0E10;
   --border: #27272A;
   --muted: #A1A1AA;
   --danger: #F87171;
+
+  color-scheme: dark;
 }
+
+/* Light theme: #05A8FA is too faint on white (2.6:1), so text and buttons use #0470F0 (4.6:1). */
+:root[data-theme="light"] {
+  --brand: #0470F0;
+  --brand-light: #05A8FA;
+  --brand-dark: #0470F0;
+  --brand-hover: #0459C7; /* darker shade so white button text stays readable on hover */
+  --background: #FFFFFF;
+  --foreground: #0A0A0A;
+
+  --card: #F4F4F5;
+  --border: #E4E4E7;
+  --muted: #52525B;
+  --danger: #DC2626;
+
+  color-scheme: light;
+}
+
+/* `dark:` utilities follow the chosen theme, not the OS setting */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
   --color-brand: var(--brand);
   --color-brand-light: var(--brand-light);
   --color-brand-dark: var(--brand-dark);
+  --color-brand-hover: var(--brand-hover);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -26,10 +53,6 @@
   --color-muted: var(--muted);
   --color-danger: var(--danger);
   --font-sans: var(--font-be-vietnam-pro);
-}
-
-html {
-  color-scheme: dark;
 }
 
 body {
@@ -49,7 +72,7 @@ body {
     @apply pt-2 text-lg font-semibold text-foreground;
   }
   .prose-blog a {
-    @apply text-brand underline underline-offset-4 hover:text-brand-light;
+    @apply text-brand underline underline-offset-4 hover:text-brand-hover;
   }
   .prose-blog ul {
     @apply list-disc space-y-2 pl-6;

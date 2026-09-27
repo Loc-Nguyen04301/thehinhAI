@@ -223,7 +223,7 @@ function WorkoutForm({
 
       <button
         type="submit"
-        className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-light active:bg-brand-dark"
+        className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-hover active:bg-brand-dark"
       >
         Lưu bài tập
       </button>

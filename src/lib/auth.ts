@@ -1,7 +1,11 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
-import { APIError, createAuthMiddleware, getAuthoritativeSessionFromCtx } from "better-auth/api";
+import {
+  APIError,
+  createAuthMiddleware,
+  getAuthoritativeSessionFromCtx,
+} from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 import { getDb, getMongoClient } from "@/lib/db";
@@ -24,7 +28,9 @@ const TARGETED_ADMIN_PATHS = new Set([
 
 /** Google sign-in is offered only when its OAuth credentials are configured. */
 export function isGoogleEnabled(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  return Boolean(
+    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+  );
 }
 
 function createAuth() {
@@ -44,7 +50,13 @@ function createAuth() {
     },
     socialProviders:
       googleClientId && googleClientSecret
-        ? { google: { clientId: googleClientId, clientSecret: googleClientSecret, prompt: "select_account" } }
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+              prompt: "select_account",
+            },
+          }
         : {},
     account: {
       // Signing in with Google using an email that already has a password account links both.
@@ -70,8 +82,14 @@ function createAuth() {
         if (!session) return; // the endpoint itself answers 401
         const target = await ctx.context.internalAdapter.findUserById(targetId);
         if (!target) return; // the endpoint itself answers 404
-        const actor = { id: session.user.id, role: session.user.role as string | undefined };
-        const targetUser = { id: target.id, role: (target as { role?: string }).role };
+        const actor = {
+          id: session.user.id,
+          role: session.user.role as string | undefined,
+        };
+        const targetUser = {
+          id: target.id,
+          role: (target as { role?: string }).role,
+        };
         if (!canManageUser(actor, targetUser)) {
           throw new APIError("FORBIDDEN", {
             message: "Bạn không có quyền thao tác với tài khoản này.",

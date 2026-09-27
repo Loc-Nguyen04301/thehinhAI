@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { MobileNav } from "@/components/nav-links";
 import { siteConfig } from "@/lib/site";
+import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
 const beVietnamPro = Be_Vietnam_Pro({
@@ -23,13 +24,24 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: siteConfig.themeColor,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: siteConfig.themeColor.dark },
+    { media: "(prefers-color-scheme: light)", color: siteConfig.themeColor.light },
+  ],
   viewportFit: "cover", // enables env(safe-area-inset-*) for the bottom tab bar
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="vi" className={`${beVietnamPro.variable} h-full antialiased`}>
+    // suppressHydrationWarning: the theme script sets data-theme before React hydrates
+    <html
+      lang="vi"
+      className={`${beVietnamPro.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="flex min-h-full flex-col font-sans">
         <SiteHeader />
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 md:py-10">

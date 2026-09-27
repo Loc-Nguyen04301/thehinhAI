@@ -22,7 +22,7 @@ export function UserMenu() {
     return (
       <Link
         href={`/login${next}`}
-        className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-brand-light"
+        className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-brand-hover"
       >
         Đăng nhập
       </Link>

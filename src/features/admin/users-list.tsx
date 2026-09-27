@@ -33,7 +33,7 @@ export async function UsersList({ query, page }: { query: string; page: number }
           placeholder="Tìm theo email…"
           className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-brand"
         />
-        <button className="shrink-0 rounded-xl bg-brand px-4 font-semibold text-background hover:bg-brand-light">
+        <button className="shrink-0 rounded-xl bg-brand px-4 font-semibold text-background hover:bg-brand-hover">
           Tìm
         </button>
       </form>

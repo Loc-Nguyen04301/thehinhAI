@@ -14,45 +14,41 @@
 ## Thương hiệu
 
 - **Tên thương hiệu:** `thehinhAI` — viết đúng nguyên văn (liền, "thehinh" viết thường, "AI" viết hoa). Tên cũ "Thể hình Daily-AI" đã bỏ, **không dùng chữ "daily"** ở bất cứ đâu. Trong code chỉ lấy tên từ `siteConfig.name` (`src/lib/site.ts`), không gõ lại trong component.
-- **Wordmark (tên dạng chữ):** `thehinh` màu trắng + `AI` màu `brand`, chữ đậm nghiêng — component `Wordmark` trong `site-header.tsx` (header và hero đều dùng).
-- **Logo biểu tượng:** `public/brand/logo-mark.png` (`siteConfig.logo`) — 770×540, hình người tập tạ + chip "AI", nền đen liền (không trong suốt), **không có chữ**. Hero = logo biểu tượng + `Wordmark`.
-  - Luôn hiển thị bằng `next/image`. Chỉ đặt trên nền đen (`bg-background`); không kéo méo, đổi màu hay thêm hiệu ứng.
-  - Icon tab/điện thoại: `src/app/icon.png` (512px) và `apple-icon.png` (180px), cắt từ cùng phần biểu tượng.
-- `public/brand/logo.png` là **logo cũ** (còn chữ `thehinhdaily-ai` và tagline) — chỉ giữ làm file gốc để cắt biểu tượng, **không hiển thị trên web**. Chờ bộ logo mới (xem Lộ trình).
+- **Wordmark (tên dạng chữ):** `thehinh` màu chữ chính (`foreground`) + `AI` màu `brand`, chữ đậm nghiêng — component `Wordmark` trong `site-header.tsx` (header và hero đều dùng).
+- **Logo biểu tượng** (`siteConfig.logo`): hình người tập tạ + chip "AI", 770×540, nền trong suốt, **không có chữ**. Có 2 bản theo giao diện: `public/brand/logo-mark-dark.png` (hình người trắng) và `logo-mark-light.png` (hình người đen); phần xanh giữ nguyên. Hero = logo biểu tượng + `Wordmark`, hai ảnh được ẩn/hiện bằng `dark:hidden` / `hidden dark:block`.
+  - Luôn hiển thị bằng `next/image`; không kéo méo, đổi màu hay thêm hiệu ứng.
+  - Icon tab/điện thoại: `src/app/icon.png` (512px) và `apple-icon.png` (180px), nền đen, cắt từ cùng phần biểu tượng.
+- `public/brand/logo.png` là **logo cũ** (nền đen, còn chữ `thehinhdaily-ai` và tagline) — chỉ giữ làm file gốc để cắt biểu tượng, **không hiển thị trên web**. Chờ bộ logo mới (xem Lộ trình).
+
+### Giao diện sáng / tối
+
+- Có 2 giao diện: **tối** (nền đen, chữ trắng) và **sáng** (nền trắng, chữ đen). Nút chuyển (`components/theme-toggle.tsx`, icon mặt trời/mặt trăng) nằm trên header.
+- Lựa chọn lưu trong `localStorage` (key `thehinhai.theme`, xem `lib/theme.ts`). Chưa chọn → theo cài đặt sáng/tối của hệ điều hành.
+- Giao diện được gắn vào `<html data-theme="dark|light">` bởi **script inline trong `<head>`** (`themeInitScript`, chạy trước khi vẽ trang → không bị nháy). Vì vậy `<html>` có `suppressHydrationWarning`. Đừng chuyển script này sang `useEffect` hay `next/script`.
+- Muốn style khác nhau theo giao diện: ưu tiên dùng token (tự đổi theo giao diện); khi thật cần thì dùng biến thể `dark:` — đã cấu hình theo `data-theme` (không theo hệ điều hành) bằng `@custom-variant dark` trong `globals.css`.
+- UI phải hiển thị đúng khi server chưa biết giao diện: chọn icon/ảnh bằng CSS (`dark:`), **không** đọc theme bằng JS lúc render.
 
 ### Bảng màu
 
-| Token | Mã | Dùng cho |
-| --- | --- | --- |
-| `--brand` | `#05A8FA` | Màu chính: nút CTA, link, icon đang chọn, số liệu nổi bật |
-| `--brand-light` | `#08CAFA` | Hover, glow, đầu sáng của gradient |
-| `--brand-dark` | `#0470F0` | Trạng thái nhấn (active), đầu đậm của gradient |
-| `--background` | `#000000` | Nền trang |
-| `--foreground` | `#FFFFFF` | Chữ chính |
+Khai báo trong `src/app/globals.css`: `:root` = giao diện tối, `:root[data-theme="light"]` = giao diện sáng. Tailwind v4 tự sinh class `bg-brand`, `text-muted`, `from-brand-light`…
 
-Khai báo trong `src/app/globals.css` (Tailwind v4 tự sinh class `bg-brand`, `text-brand-light`, `from-brand-light`...):
+| Token | Tối | Sáng | Dùng cho |
+| --- | --- | --- | --- |
+| `--brand` | `#05A8FA` | `#0470F0` | Màu chính: nút CTA, link, icon đang chọn, số liệu nổi bật |
+| `--brand-light` | `#08CAFA` | `#05A8FA` | Đầu sáng của gradient, điểm nhấn trang trí (không dùng cho chữ nhỏ) |
+| `--brand-dark` | `#0470F0` | `#0470F0` | Trạng thái nhấn (active), đầu đậm của gradient |
+| `--brand-hover` | `#08CAFA` | `#0459C7` | Hover của nút/link (`hover:bg-brand-hover`, `hover:text-brand-hover`) |
+| `--background` | `#000000` | `#FFFFFF` | Nền trang |
+| `--foreground` | `#FFFFFF` | `#0A0A0A` | Chữ chính |
+| `--card` | `#0E0E10` | `#F4F4F5` | Nền thẻ/khối |
+| `--border` | `#27272A` | `#E4E4E7` | Viền |
+| `--muted` | `#A1A1AA` | `#52525B` | Chữ phụ |
+| `--danger` | `#F87171` | `#DC2626` | Chỉ cho thông báo lỗi |
 
-```css
-:root {
-  --brand: #05A8FA;
-  --brand-light: #08CAFA;
-  --brand-dark: #0470F0;
-  --background: #000000;
-  --foreground: #FFFFFF;
-}
-
-@theme inline {
-  --color-brand: var(--brand);
-  --color-brand-light: var(--brand-light);
-  --color-brand-dark: var(--brand-dark);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-}
-```
-
-- **Nền tối là giao diện mặc định** (theo logo). Token phụ `--card`, `--border`, `--muted` là sắc xám trung tính trên nền đen; `--danger` chỉ dùng cho thông báo lỗi. Không thêm màu mới ngoài các token này.
+- Bảng màu thương hiệu gốc: `#05A8FA`, `#08CAFA`, `#0470F0`. Ngoại lệ duy nhất là `#0459C7` (sắc đậm hơn của `#0470F0`), chỉ dùng cho hover ở giao diện sáng. Không thêm màu mới ngoài các token trên.
+- **Vì sao giao diện sáng dùng `#0470F0`:** `#05A8FA` trên nền trắng chỉ đạt tương phản ~2.6:1, khó đọc; `#0470F0` đạt ~4.6:1 (chuẩn AA), cả khi làm chữ trên nền trắng lẫn làm nền cho chữ trắng.
+- **Chữ trên nền `bg-brand` luôn dùng `text-background`**: giao diện tối cho chữ đen trên `#05A8FA` (~8:1), giao diện sáng cho chữ trắng trên `#0470F0` (~4.6:1). Không dùng `text-white`/`text-black`.
 - Gradient thương hiệu (vòng cung trong logo): `bg-linear-to-r from-brand-light to-brand-dark`.
-- **Chữ trên nền `bg-brand` dùng màu đen** (`text-background`): chữ trắng trên `#05A8FA` chỉ đạt tương phản ~2.6:1, khó đọc. Ngược lại, chữ `text-brand` trên nền đen đạt ~8:1, dùng thoải mái.
 
 ## Ngôn ngữ & giọng văn
 
@@ -96,7 +92,7 @@ Biến môi trường: copy `.env.example` → `.env.local` (giải thích từn
 
 ```
 content/blog/               # Bài blog Markdown (frontmatter: title, description, date, tags, draft?)
-public/brand/logo-mark.png  # Logo biểu tượng (không chữ) — logo.png là logo cũ, không dùng
+public/brand/logo-mark-{dark,light}.png  # Logo biểu tượng (không chữ) theo giao diện — logo.png là logo cũ, không dùng
 scripts/set-role.mts        # CLI cấp role (npm run set-role)
 src/
   app/                      # Chỉ routing: page/layout/route mỏng, gọi sang features/
@@ -111,7 +107,7 @@ src/
     api/auth/[...all]/route.ts  # Toàn bộ endpoint Better Auth
     api/meals/analyze/route.ts  # POST ảnh + ghi chú → JSON dinh dưỡng (cần đăng nhập)
     icon.png, apple-icon.png    # Icon tab / màn hình chính
-  components/               # UI dùng chung: site-header (Wordmark), site-footer, nav-links (menu desktop + tab mobile), user-menu, icons, page-heading, post-card
+  components/               # UI dùng chung: site-header (Wordmark; 3 vùng: chữ logo trái – menu giữa – nút sáng/tối + tài khoản phải), site-footer, nav-links (menu desktop + tab mobile), user-menu, theme-toggle, icons, page-heading, post-card
   features/                 # Logic theo tính năng
     auth/                   # auth-form.tsx (đăng nhập/đăng ký/Google)
     admin/                  # users-list, user-detail (server), user-actions (client), actions.ts (Server Actions), badges
@@ -119,6 +115,7 @@ src/
     meals/                  # schema.ts (zod), analyze-meal.ts (server), meal-analyzer.tsx, meal-result.tsx, resize-image.ts
   lib/
     site.ts                 # Tên, slogan, logo, menu
+    theme.ts                # Giao diện sáng/tối: key localStorage, script chống nháy, setTheme()
     permissions.ts          # Role & quyền (dùng chung server + client)
     auth.ts                 # Cấu hình Better Auth (server) — getAuth()
     auth-client.ts          # authClient cho component "use client" (useSession, signIn…)

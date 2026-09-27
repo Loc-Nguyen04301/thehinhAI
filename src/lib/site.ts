@@ -3,10 +3,16 @@ export const siteConfig = {
   slogan: "Tập để khoẻ đẹp mỗi ngày",
   description:
     "Website thể hình tích hợp AI cho người Việt: nhật ký tập, đo kcal bữa ăn bằng ảnh, blog thể hình.",
-  // Logo mark only (figure + AI chip). The name is rendered as text by <Wordmark />.
-  logo: { src: "/brand/logo-mark.png", width: 770, height: 540 },
-  // Matches --background in globals.css (metadata can't read CSS variables)
-  themeColor: "#000000",
+  // Logo mark only (figure + AI chip), transparent, one file per theme.
+  // The name is rendered as text by <Wordmark />.
+  logo: {
+    dark: "/brand/logo-mark-dark.png", // white figure
+    light: "/brand/logo-mark-light.png", // black figure
+    width: 770,
+    height: 540,
+  },
+  // Browser UI color per OS theme; matches --background (metadata can't read CSS variables)
+  themeColor: { dark: "#000000", light: "#FFFFFF" },
   nav: [
     { href: "/", label: "Trang chủ", icon: "home" },
     { href: "/workouts", label: "Nhật ký tập", icon: "dumbbell" },

@@ -122,7 +122,7 @@ export function MealAnalyzer() {
         <button
           type="submit"
           disabled={!file || loading}
-          className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-light active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-hover active:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
         >
           {loading ? "Đang phân tích… (khoảng 10–20 giây)" : "Phân tích bữa ăn"}
         </button>

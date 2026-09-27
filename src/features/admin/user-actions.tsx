@@ -34,7 +34,7 @@ export function RoleForm({ userId, role }: { userId: string; role?: string | nul
           <button
             type="submit"
             disabled={pending}
-            className="shrink-0 rounded-xl bg-brand px-4 font-semibold text-background hover:bg-brand-light disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-brand px-4 font-semibold text-background hover:bg-brand-hover disabled:opacity-50"
           >
             Lưu
           </button>

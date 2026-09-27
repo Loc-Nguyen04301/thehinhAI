@@ -150,7 +150,7 @@ export function AuthForm({
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-light active:bg-brand-dark disabled:opacity-50"
+          className="w-full rounded-xl bg-brand py-3 font-semibold text-background transition-colors hover:bg-brand-hover active:bg-brand-dark disabled:opacity-50"
         >
           {loading ? "Đang xử lý…" : mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}
         </button>
@@ -158,7 +158,7 @@ export function AuthForm({
 
       <p className="text-center text-sm text-muted">
         {mode === "login" ? "Chưa có tài khoản? " : "Đã có tài khoản? "}
-        <Link href={otherHref} className="font-semibold text-brand hover:text-brand-light">
+        <Link href={otherHref} className="font-semibold text-brand hover:text-brand-hover">
           {mode === "login" ? "Đăng ký" : "Đăng nhập"}
         </Link>
       </p>
