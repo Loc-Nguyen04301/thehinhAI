@@ -128,6 +128,43 @@ Menu (desktop + tab dưới trên mobile) lấy từ `siteConfig.nav`; thêm tra
 
 Quy ước: code của một tính năng nằm trong `src/features/<tên>/`; file trong `app/` chỉ import và render.
 
+## Cơ sở dữ liệu (MongoDB)
+
+Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có file schema riêng / không dùng Mongoose**: hình dạng document được quy định trong code và dữ liệu được kiểm tra bằng zod trước khi ghi. Collection tự được tạo khi dùng lần đầu, không cần migrate.
+
+**Quy ước id (quan trọng khi truy vấn):**
+- Mọi `_id` và mọi khoá tham chiếu (`userId`) là **`ObjectId`**, không phải chuỗi — nhờ vậy `$lookup` / lọc giữa các collection chạy trực tiếp.
+- Ở tầng ứng dụng, id là **chuỗi hex 24 ký tự** (`session.user.id`, id gửi lên từ client). Chuyển sang ObjectId bằng `toObjectId()` trong `lib/db.ts` (trả `null` nếu sai định dạng), chỉ ngay tại chỗ truy vấn trong repository.
+- Collection mới có trường trỏ tới user thì đặt tên `userId`, kiểu `ObjectId`.
+
+**Collection do Better Auth quản lý** — thư viện tự định nghĩa trường; chỉ cấu hình qua `lib/auth.ts`, **không sửa tay trên Atlas** (đổi role dùng `/admin` hoặc `npm run set-role`):
+
+| Collection | Trường chính |
+| --- | --- |
+| `user` | `_id`, `name`, `email`, `emailVerified`, `image`, `createdAt`, `updatedAt`; plugin admin thêm `role`, `banned`, `banReason`, `banExpires` |
+| `account` | `userId` → `user._id`, `providerId` (`credential` = email + mật khẩu, `google`), `accountId`, `password` (đã băm), `accessToken`, `refreshToken`, `idToken`, `scope`… |
+| `session` | `userId` → `user._id`, `token`, `expiresAt`, `ipAddress`, `userAgent`, `impersonatedBy` |
+| `verification` | `identifier`, `value`, `expiresAt` (chỉ xuất hiện khi cần, VD đăng nhập Google) |
+
+**Collection của ứng dụng:**
+
+| Collection | Trường | Index | Định nghĩa |
+| --- | --- | --- | --- |
+| `workouts` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `exercise`, `muscleGroup`, `sets` (mảng 1–50 phần tử `{ reps, weightKg }`, mỗi hiệp một phần tử, `weightKg: 0` = tự trọng), `note?`, `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `WorkoutDoc` trong `features/workouts/repository.ts`; ràng buộc giá trị: `WorkoutInputSchema` (zod) trong `types.ts` |
+
+- Thêm collection mới: khai báo kiểu document + hàm truy vấn trong `features/<tên>/repository.ts` (`import "server-only"`), schema zod cho input trong `types.ts`, tạo index ngay trong repository (xem `workouts()`), rồi bổ sung bảng trên.
+- Ví dụ truy vấn trên Atlas (Aggregations): tổng số hiệp và khối lượng tập theo user — `$unwind` mảng `sets` để tính trên từng hiệp
+  ```js
+  [
+    { $unwind: "$sets" },
+    { $group: { _id: "$userId", sets: { $sum: 1 }, volume: { $sum: { $multiply: ["$sets.reps", "$sets.weightKg"] } } } },
+    { $lookup: { from: "user", localField: "_id", foreignField: "_id", as: "user" } },
+    { $unwind: "$user" },
+    { $project: { _id: 0, email: "$user.email", sets: 1, volume: 1 } },
+  ]
+  ```
+- **Lịch sử đổi cấu trúc** (đã chạy trên Atlas): `userId` chuỗi → ObjectId; `sets/reps/weightKg` (số) → mảng `sets: [{ reps, weightKg }]`. Đổi cấu trúc lần sau: viết lệnh `updateMany` chuyển dữ liệu cũ, chạy **ngay sau** khi đổi code (code mới không đọc được dữ liệu dạng cũ), rồi ghi thêm vào đây.
+
 ## Các tính năng
 
 ### 0. Xác thực & phân quyền
@@ -151,9 +188,12 @@ Quy ước: code của một tính năng nằm trong `src/features/<tên>/`; fil
 - Better Auth có sẵn rate limit cho đăng nhập/đăng ký (~3 lần/10 giây/IP).
 
 ### 1. Nhật ký tập (`/workouts`)
-- Mỗi bản ghi = 1 bài tập: ngày, tên bài, nhóm cơ, hiệp × lần × kg, ghi chú. Khối lượng = sets × reps × kg.
-- Lưu ở MongoDB, collection `workouts` (`userId`, `date` YYYY-MM-DD, …, `createdAt`), index `{ userId, date, createdAt }`. Mọi truy vấn trong `repository.ts` đều **lọc theo `userId`** của người đang đăng nhập.
-- Luồng: `workout-log.tsx` (Server Component) đọc DB → `WorkoutLogClient` hiển thị. Thêm/xoá gọi Server Actions trong `actions.ts` (kiểm tra session + zod) → `refresh()` để tải lại dữ liệu; UI cập nhật tức thì nhờ `useOptimistic`.
+- Mỗi bản ghi = 1 bài tập: ngày, tên bài, nhóm cơ, **danh sách hiệp** (mỗi hiệp có số lần và mức tạ riêng), ghi chú. Khối lượng = Σ (số lần × kg) của các hiệp (`volumeOf()`).
+- Form nhập hiệp (`SetsEditor`): mỗi hiệp một dòng; "+ Thêm hiệp" chép số lần + mức tạ của hiệp trước; nút × xoá hiệp (luôn giữ ít nhất 1). Lỗi của một hiệp hiện kèm số hiệp ("Hiệp 2: …", `firstIssueMessage()`). Sau khi lưu, form giữ số hiệp + số lần, xoá mức tạ.
+- Hiển thị (`describeSets()`): các hiệp liên tiếp giống nhau được gộp ("3 hiệp × 10 lần × 60 kg"), khác nhau thì liệt kê ("10 lần × 60 kg · 8 lần × 70 kg"), kèm "tổng … kg".
+- Lưu ở collection `workouts` (xem mục **Cơ sở dữ liệu**). Mọi truy vấn trong `repository.ts` đều **lọc theo `userId`** của người đang đăng nhập.
+- Luồng: `workout-log.tsx` (Server Component) đọc DB → `WorkoutLogClient` hiển thị. Thêm / sửa / xoá gọi Server Actions `addWorkoutAction` / `updateWorkoutAction` / `removeWorkoutAction` trong `actions.ts` (kiểm tra session + zod) → `refresh()` để tải lại dữ liệu; UI cập nhật tức thì nhờ `useOptimistic` (bài chưa được server xác nhận có `pending: true`, hiện mờ và không bấm được).
+- **Sửa bài tập:** chạm vào một bài trong "Lịch sử tập" → dòng đó mở thành form sửa tại chỗ, điền sẵn dữ liệu cũ (Huỷ hoặc phím Esc để đóng). Form tạo mới và form sửa dùng chung component `WorkoutForm` (có `initial` = chế độ sửa). Xoá ghi chú khi sửa sẽ `$unset` trường `note`.
 - **"Hôm nay" chỉ tính ở client** (`useToday()` trong `workout-log-client.tsx`, theo múi giờ người dùng); server không biết múi giờ của người dùng. Không dùng `new Date()` ở server để lấy ngày hiện tại.
 - Staff có quyền `workout:view-any` xem nhật ký của user ở `/admin/users/[id]` (component `WorkoutHistoryReadOnly`).
 

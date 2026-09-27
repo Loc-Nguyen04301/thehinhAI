@@ -2,8 +2,8 @@
 
 import { refresh } from "next/cache";
 import { getSession } from "@/lib/session";
-import { deleteWorkout, insertWorkout } from "./repository";
-import { WorkoutInputSchema } from "./types";
+import { deleteWorkout, insertWorkout, updateWorkout } from "./repository";
+import { firstIssueMessage, WorkoutInputSchema } from "./types";
 
 // Server Actions are public POST endpoints: always re-check the session and validate input here.
 
@@ -20,7 +20,7 @@ export async function addWorkoutAction(input: unknown): Promise<ActionResult> {
 
   const parsed = WorkoutInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu chưa hợp lệ." };
+    return { ok: false, error: firstIssueMessage(parsed.error) };
   }
 
   try {
@@ -30,6 +30,26 @@ export async function addWorkoutAction(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "Chưa lưu được bài tập, bạn thử lại nhé." };
   }
   refresh(); // re-render the page with fresh data from the database
+  return { ok: true };
+}
+
+export async function updateWorkoutAction(id: string, input: unknown): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return SIGNED_OUT;
+
+  const parsed = WorkoutInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstIssueMessage(parsed.error) };
+  }
+
+  try {
+    const updated = await updateWorkout(session.user.id, String(id), parsed.data);
+    if (!updated) return { ok: false, error: "Không tìm thấy bài tập này." };
+  } catch (error) {
+    console.error("[workouts/update]", error);
+    return { ok: false, error: "Chưa lưu được thay đổi, bạn thử lại nhé." };
+  }
+  refresh();
   return { ok: true };
 }
 

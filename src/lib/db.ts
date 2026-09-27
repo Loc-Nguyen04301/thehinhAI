@@ -1,5 +1,5 @@
 import "server-only";
-import { MongoClient, type Db } from "mongodb";
+import { MongoClient, ObjectId, type Db } from "mongodb";
 
 // Reuse one client per process; in dev, survive hot reloads via globalThis.
 const globalForMongo = globalThis as unknown as { mongoClient?: MongoClient };
@@ -17,4 +17,12 @@ export function getMongoClient(): MongoClient {
 /** Database name comes from MONGODB_DB, else from the URI path, else the driver default ("test"). */
 export function getDb(): Db {
   return getMongoClient().db(process.env.MONGODB_DB || undefined);
+}
+
+/**
+ * Hex string (e.g. `session.user.id`, an id from the client) → ObjectId, or null if malformed.
+ * Stricter than ObjectId.isValid(), which also accepts any 12-character string.
+ */
+export function toObjectId(id: string): ObjectId | null {
+  return /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : null;
 }
