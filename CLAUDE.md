@@ -112,7 +112,7 @@ src/
     auth/                   # auth-form.tsx (đăng nhập/đăng ký/Google)
     admin/                  # users-list, user-detail (server), user-actions (client), actions.ts (Server Actions), badges
     workouts/               # types.ts (zod), repository.ts (MongoDB), actions.ts (Server Actions), workout-log.tsx (server) + workout-log-client.tsx
-    meals/                  # schema.ts (zod), analyze-meal.ts (server), meal-analyzer.tsx, meal-result.tsx, resize-image.ts
+    meals/                  # schema.ts (zod), analyze-meal.ts (server), meal-analyzer.tsx, meal-result.tsx, resize-image.ts, drop-image.ts (đọc ảnh kéo thả)
   lib/
     site.ts                 # Tên, slogan, logo, menu
     theme.ts                # Giao diện sáng/tối: key localStorage, script chống nháy, setTheme()
@@ -150,7 +150,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 
 | Collection | Trường | Index | Định nghĩa |
 | --- | --- | --- | --- |
-| `workouts` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `exercise`, `muscleGroup`, `sets` (mảng 1–50 phần tử `{ reps, weightKg }`, mỗi hiệp một phần tử, `weightKg: 0` = tự trọng), `note?`, `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `WorkoutDoc` trong `features/workouts/repository.ts`; ràng buộc giá trị: `WorkoutInputSchema` (zod) trong `types.ts` |
+| `workouts` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `exercise`, `muscleGroup`, `sets` (mảng 1–`MAX_SETS` (= 20) phần tử `{ reps, weightKg }`, mỗi hiệp một phần tử, `weightKg: 0` = tự trọng), `note?`, `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `WorkoutDoc` trong `features/workouts/repository.ts`; ràng buộc giá trị: `WorkoutInputSchema` (zod) trong `types.ts` |
 
 - Thêm collection mới: khai báo kiểu document + hàm truy vấn trong `features/<tên>/repository.ts` (`import "server-only"`), schema zod cho input trong `types.ts`, tạo index ngay trong repository (xem `workouts()`), rồi bổ sung bảng trên.
 - Ví dụ truy vấn trên Atlas (Aggregations): tổng số hiệp và khối lượng tập theo user — `$unwind` mảng `sets` để tính trên từng hiệp
@@ -190,15 +190,19 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 ### 1. Nhật ký tập (`/workouts`)
 - Mỗi bản ghi = 1 bài tập: ngày, tên bài, nhóm cơ, **danh sách hiệp** (mỗi hiệp có số lần và mức tạ riêng), ghi chú. Khối lượng = Σ (số lần × kg) của các hiệp (`volumeOf()`).
 - Form nhập hiệp (`SetsEditor`): mỗi hiệp một dòng; "+ Thêm hiệp" chép số lần + mức tạ của hiệp trước; nút × xoá hiệp (luôn giữ ít nhất 1). Lỗi của một hiệp hiện kèm số hiệp ("Hiệp 2: …", `firstIssueMessage()`). Sau khi lưu, form giữ số hiệp + số lần, xoá mức tạ.
-- Hiển thị (`describeSets()`): các hiệp liên tiếp giống nhau được gộp ("3 hiệp × 10 lần × 60 kg"), khác nhau thì liệt kê ("10 lần × 60 kg · 8 lần × 70 kg"), kèm "tổng … kg".
+- Hiển thị trong lịch sử (`WorkoutItem`): **mỗi hiệp một dòng** ("Hiệp 1   10 lần × 60 kg"); các hiệp liên tiếp giống nhau gộp thành một dòng có khoảng ("Hiệp 1–3   12 lần × 40 kg", `groupSets()`); **"Tổng khối lượng: … kg" ở dòng riêng** (ẩn khi toàn tự trọng). Không gộp các hiệp và tổng vào chung một dòng.
 - Lưu ở collection `workouts` (xem mục **Cơ sở dữ liệu**). Mọi truy vấn trong `repository.ts` đều **lọc theo `userId`** của người đang đăng nhập.
 - Luồng: `workout-log.tsx` (Server Component) đọc DB → `WorkoutLogClient` hiển thị. Thêm / sửa / xoá gọi Server Actions `addWorkoutAction` / `updateWorkoutAction` / `removeWorkoutAction` trong `actions.ts` (kiểm tra session + zod) → `refresh()` để tải lại dữ liệu; UI cập nhật tức thì nhờ `useOptimistic` (bài chưa được server xác nhận có `pending: true`, hiện mờ và không bấm được).
-- **Sửa bài tập:** chạm vào một bài trong "Lịch sử tập" → dòng đó mở thành form sửa tại chỗ, điền sẵn dữ liệu cũ (Huỷ hoặc phím Esc để đóng). Form tạo mới và form sửa dùng chung component `WorkoutForm` (có `initial` = chế độ sửa). Xoá ghi chú khi sửa sẽ `$unset` trường `note`.
+- **Sửa bài tập:** chạm vào một bài trong "Lịch sử tập" → mở **popup** "Sửa bài tập" (`EditWorkoutDialog`, thẻ `<dialog>` gốc + `showModal()`), điền sẵn dữ liệu cũ. Không sửa tại chỗ trong danh sách — dễ nhầm với form "Ghi bài tập". Đóng bằng ×, Huỷ, Esc hoặc bấm ra ngoài; nền phía sau bị khoá (không bấm/cuộn được, CSS `html:has(dialog[open])` trong `globals.css`), đóng xong focus quay về bài vừa chạm.
+- Form tạo mới và form sửa dùng chung component `WorkoutForm` (có `initial` = chế độ sửa). Xoá ghi chú khi sửa sẽ `$unset` trường `note`.
+- Popup/hộp thoại mới trong dự án: dùng `<dialog>` + `showModal()` như `EditWorkoutDialog`, không tự dựng lớp phủ bằng `div`.
 - **"Hôm nay" chỉ tính ở client** (`useToday()` trong `workout-log-client.tsx`, theo múi giờ người dùng); server không biết múi giờ của người dùng. Không dùng `new Date()` ở server để lấy ngày hiện tại.
 - Staff có quyền `workout:view-any` xem nhật ký của user ở `/admin/users/[id]` (component `WorkoutHistoryReadOnly`).
 
 ### 2. Đo kcal bằng ảnh (`/meals`)
-- Luồng: client resize ảnh (≤1280px, JPEG) → `POST /api/meals/analyze` (FormData `image`, `note`) → `analyzeMealForm()` kiểm tra ảnh (JPG/PNG/WEBP/GIF, ≤4 MB) → gọi Claude vision bằng **structured outputs** (`client.messages.parse` + `zodOutputFormat(MealAnalysisSchema)`), SDK tự validate bằng zod → server cộng tổng dinh dưỡng → trả `MealResult`. Client validate lại bằng `MealResultSchema`.
+- Chọn ảnh (`meal-analyzer.tsx`): bấm để chụp/chọn ảnh, hoặc **kéo thả** vào khung (máy tính). Khi kéo qua: khung viền xanh + "Thả ảnh vào đây" (đã có ảnh thì "Thả để đổi ảnh"). Có listener `dragover`/`drop` trên `window` để file/link thả trượt ra ngoài khung không làm trình duyệt mở nó và rời trang (trừ khi thả vào ô nhập chữ).
+- **Kéo từ trang web / tab khác** (VD Google Images): trình duyệt **không gửi file**, chỉ gửi `text/html` (`<img src>`) + `text/uri-list` (đã kiểm chứng bằng kéo thả thật trên Edge). `drop-image.ts` xử lý theo thứ tự: file ảnh → `<img src>` trong HTML → link. Ảnh `data:` (thumbnail Google) được chuyển thành file như ảnh thường; ảnh `http(s)` giữ nguyên **URL** (trang không đọc được ảnh domain khác vì CORS) → gửi `imageUrl` lên server → Claude tự tải (`source: { type: "url" }`). Server **không bao giờ tự tải URL người dùng gửi** (tránh SSRF). Ảnh xem trước không tải được hoặc Claude không tải được → báo "Không tải được ảnh từ trang web này…".
+- Luồng: client resize ảnh (≤1280px, JPEG) → `POST /api/meals/analyze` (FormData `image` **hoặc** `imageUrl`, và `note`) → `analyzeMealForm()` kiểm tra ảnh (JPG/PNG/WEBP/GIF, ≤4 MB; URL phải là http(s), ≤2048 ký tự) → gọi Claude vision bằng **structured outputs** (`client.messages.parse` + `zodOutputFormat(MealAnalysisSchema)`), SDK tự validate bằng zod → server cộng tổng dinh dưỡng → trả `MealResult`. Client validate lại bằng `MealResultSchema`.
 - `MealAnalysisSchema` trong `schema.ts` là **nguồn duy nhất**: nó vừa là format gửi cho Claude, vừa là type TS. Các `.describe()` là chỉ dẫn cho model, viết tiếng Việt.
 - Ô text "mô tả thêm" được coi là **đáng tin hơn ảnh** (khẩu phần, cách nấu, món bị che).
 - Prompt ưu tiên món Việt, trả lời tiếng Việt. Sửa prompt tại `features/meals/analyze-meal.ts`.

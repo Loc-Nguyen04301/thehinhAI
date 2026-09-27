@@ -1,6 +1,15 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useSyncExternalStore, useTransition } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { addWorkoutAction, removeWorkoutAction, updateWorkoutAction } from "./actions";
 import {
   COMMON_EXERCISES,
@@ -90,6 +99,9 @@ export function WorkoutLogClient({ entries }: { entries: WorkoutEntry[] }) {
     return <div className="h-96 animate-pulse rounded-2xl bg-card" aria-busy="true" />;
   }
 
+  // Looked up by id so the dialog closes by itself if the entry disappears
+  const editingEntry = optimisticEntries.find((entry) => entry.id === editingId);
+
   function handleAdd(input: WorkoutInput) {
     setAddError(null);
     startTransition(async () => {
@@ -103,7 +115,6 @@ export function WorkoutLogClient({ entries }: { entries: WorkoutEntry[] }) {
   }
 
   function handleUpdate(entry: WorkoutEntry, input: WorkoutInput) {
-    setEditingId(null);
     setHistoryError(null);
     startTransition(async () => {
       applyOptimistic({
@@ -144,16 +155,86 @@ export function WorkoutLogClient({ entries }: { entries: WorkoutEntry[] }) {
         today={today}
         entries={optimisticEntries}
         error={historyError}
-        editingId={editingId}
         onEdit={(entry) => {
           setHistoryError(null);
           setEditingId(entry.id);
         }}
-        onCancelEdit={() => setEditingId(null)}
-        onUpdate={handleUpdate}
         onRemove={handleRemove}
       />
+      {editingEntry && (
+        <EditWorkoutDialog
+          key={editingEntry.id}
+          entry={editingEntry}
+          today={today}
+          onSave={(input) => handleUpdate(editingEntry, input)}
+          onClose={() => setEditingId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Edit form in a modal <dialog>: the page behind is dimmed and inert, Esc closes it,
+ * and focus returns to the entry that was tapped. Kept separate from the create form
+ * so the two can't be confused.
+ */
+function EditWorkoutDialog({
+  entry,
+  today,
+  onSave,
+  onClose,
+}: {
+  entry: WorkoutEntry;
+  today: string;
+  onSave: (input: WorkoutInput) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const close = () => dialogRef.current?.close(); // fires `close` → onClose
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      // A click on the dialog element itself (not its content) is a click on the backdrop
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      aria-labelledby="edit-workout-title"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+    >
+      <div>
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-4 py-3">
+          <h2 id="edit-workout-title" className="text-lg font-bold">
+            Sửa bài tập
+          </h2>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Đóng"
+            className="flex size-9 items-center justify-center rounded-full text-2xl leading-none text-muted hover:bg-card hover:text-foreground"
+          >
+            ×
+          </button>
+        </header>
+        <WorkoutForm
+          submitLabel="Lưu thay đổi"
+          today={today}
+          initial={entry}
+          onSubmit={(input) => {
+            onSave(input);
+            close();
+          }}
+          onCancel={close}
+        />
+      </div>
+    </dialog>
   );
 }
 
@@ -231,9 +312,6 @@ function WorkoutForm({
   return (
     <form
       onSubmit={handleSubmit}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && onCancel) onCancel();
-      }}
       aria-label={editing ? `Sửa bài tập ${initial?.exercise}` : undefined}
       className={
         editing
@@ -395,42 +473,37 @@ function SetsEditor({ rows, onChange }: { rows: SetRow[]; onChange: (rows: SetRo
 function formatSet(set: WorkoutSet): string {
   return set.weightKg > 0
     ? `${set.reps} lần × ${numberFormat.format(set.weightKg)} kg`
-    : `${set.reps} lần tự trọng`;
+    : `${set.reps} lần · tự trọng`;
 }
 
-/** "3 hiệp × 10 lần × 60 kg" when sets repeat; "10 lần × 60 kg · 8 lần × 70 kg" otherwise. */
-function describeSets(sets: WorkoutSet[]): string {
-  const groups: { set: WorkoutSet; count: number }[] = [];
-  for (const set of sets) {
+/** Consecutive identical sets share one line: sets 1–3 → "Hiệp 1–3". */
+function groupSets(sets: WorkoutSet[]): { label: string; set: WorkoutSet }[] {
+  const groups: { from: number; to: number; set: WorkoutSet }[] = [];
+  sets.forEach((set, index) => {
     const last = groups[groups.length - 1];
-    if (last && last.set.reps === set.reps && last.set.weightKg === set.weightKg) last.count++;
-    else groups.push({ set, count: 1 });
-  }
-  return groups
-    .map(({ set, count }) => (count > 1 ? `${count} hiệp × ${formatSet(set)}` : formatSet(set)))
-    .join(" · ");
+    if (last && last.set.reps === set.reps && last.set.weightKg === set.weightKg) last.to = index + 1;
+    else groups.push({ from: index + 1, to: index + 1, set });
+  });
+  return groups.map(({ from, to, set }) => ({
+    label: from === to ? `Hiệp ${from}` : `Hiệp ${from}–${to}`,
+    set,
+  }));
 }
 
 function WorkoutHistory({
   today,
   entries,
   error,
-  editingId,
   onEdit,
-  onCancelEdit,
-  onUpdate,
   onRemove,
 }: {
   today: string;
   entries: DisplayEntry[];
   error?: string | null;
-  editingId?: string | null;
   onEdit?: (entry: WorkoutEntry) => void;
-  onCancelEdit?: () => void;
-  onUpdate?: (entry: WorkoutEntry, input: WorkoutInput) => void;
   onRemove?: (entry: WorkoutEntry) => void;
 }) {
-  const editable = Boolean(onEdit && onUpdate && onRemove);
+  const editable = Boolean(onEdit && onRemove);
 
   if (entries.length === 0) {
     return (
@@ -466,26 +539,9 @@ function WorkoutHistory({
               </span>
             </div>
             <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-              {items.map((entry) =>
-                editable && entry.id === editingId ? (
-                  <li key={entry.id} className="bg-background/60">
-                    <WorkoutForm
-                      submitLabel="Lưu thay đổi"
-                      today={today}
-                      initial={entry}
-                      onSubmit={(input) => onUpdate!(entry, input)}
-                      onCancel={onCancelEdit}
-                    />
-                  </li>
-                ) : (
-                  <WorkoutItem
-                    key={entry.id}
-                    entry={entry}
-                    onEdit={editable ? onEdit : undefined}
-                    onRemove={editable ? onRemove : undefined}
-                  />
-                ),
-              )}
+              {items.map((entry) => (
+                <WorkoutItem key={entry.id} entry={entry} onEdit={onEdit} onRemove={onRemove} />
+              ))}
             </ul>
           </section>
         );
@@ -503,19 +559,32 @@ function WorkoutItem({
   onEdit?: (entry: WorkoutEntry) => void;
   onRemove?: (entry: WorkoutEntry) => void;
 }) {
+  const volume = volumeOf(entry);
+  // <span>s (not <p>/<div>) because this also sits inside a <button>
   const details = (
     <>
-      <p className="font-medium">
+      <span className="block font-medium">
         {entry.exercise}{" "}
         <span className="ml-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
           {entry.muscleGroup}
         </span>
-      </p>
-      <p className="text-sm text-muted">
-        {describeSets(entry.sets)}
-        {volumeOf(entry) > 0 && ` · tổng ${numberFormat.format(volumeOf(entry))} kg`}
-      </p>
-      {entry.note && <p className="text-sm italic text-muted">{entry.note}</p>}
+      </span>
+      {/* One line per set (identical consecutive sets grouped), total on its own line */}
+      <span className="mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
+        {groupSets(entry.sets).map(({ label, set }) => (
+          <Fragment key={label}>
+            <span className="text-muted">{label}</span>
+            <span>{formatSet(set)}</span>
+          </Fragment>
+        ))}
+      </span>
+      {volume > 0 && (
+        <span className="mt-1 block text-sm text-muted">
+          Tổng khối lượng:{" "}
+          <span className="font-semibold text-foreground">{numberFormat.format(volume)} kg</span>
+        </span>
+      )}
+      {entry.note && <span className="mt-1 block text-sm italic text-muted">{entry.note}</span>}
     </>
   );
 
@@ -527,12 +596,12 @@ function WorkoutItem({
           disabled={entry.pending}
           onClick={() => onEdit(entry)}
           aria-label={`Sửa bài tập ${entry.exercise}`}
-          className="-m-2 min-w-0 flex-1 space-y-0.5 rounded-xl p-2 text-left transition-colors hover:bg-background disabled:cursor-default disabled:hover:bg-transparent"
+          className="-m-2 min-w-0 flex-1 rounded-xl p-2 text-left transition-colors hover:bg-background disabled:cursor-default disabled:hover:bg-transparent"
         >
           {details}
         </button>
       ) : (
-        <div className="min-w-0 flex-1 space-y-0.5">{details}</div>
+        <div className="min-w-0 flex-1">{details}</div>
       )}
       {onRemove && (
         <button

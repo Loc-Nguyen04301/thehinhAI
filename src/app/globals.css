@@ -60,6 +60,11 @@ body {
   color: var(--foreground);
 }
 
+/* Don't let the page scroll behind an open modal <dialog> */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 /* Rendered Markdown for blog posts */
 @layer components {
   .prose-blog {

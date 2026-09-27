@@ -41,8 +41,36 @@ function isImageType(type: string): type is ImageType {
   return (IMAGE_TYPES as readonly string[]).includes(type);
 }
 
-/** Validates the multipart form sent by the client (`image`, `note`) and analyzes it. */
+const MAX_IMAGE_URL_LENGTH = 2048;
+
+/** http(s) URL of an image on another website, e.g. dragged in from Google Images. */
+function parseImageUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new MealAnalysisError("Đường dẫn ảnh không hợp lệ.", 400);
+  }
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || value.length > MAX_IMAGE_URL_LENGTH) {
+    throw new MealAnalysisError("Đường dẫn ảnh không hợp lệ.", 400);
+  }
+  return url.href;
+}
+
+/**
+ * Validates the multipart form sent by the client and analyzes it. The photo is either
+ * `image` (an uploaded file) or `imageUrl` (a web image, downloaded by Anthropic — we never
+ * fetch user-supplied URLs from our server, so it can't be used to reach internal hosts).
+ */
 export async function analyzeMealForm(form: FormData): Promise<MealResult> {
+  const rawNote = form.get("note");
+  const note = typeof rawNote === "string" ? rawNote.trim().slice(0, MAX_NOTE_LENGTH) : "";
+
+  const imageUrl = form.get("imageUrl");
+  if (typeof imageUrl === "string" && imageUrl) {
+    return analyzeMeal({ source: { type: "url", url: parseImageUrl(imageUrl) }, note });
+  }
+
   const image = form.get("image");
   if (!(image instanceof File) || image.size === 0) {
     throw new MealAnalysisError("Bạn chưa chọn ảnh bữa ăn.", 400);
@@ -54,19 +82,15 @@ export async function analyzeMealForm(form: FormData): Promise<MealResult> {
     throw new MealAnalysisError("Ảnh quá lớn (tối đa 4 MB), bạn chọn ảnh khác nhé.", 413);
   }
 
-  const rawNote = form.get("note");
-  const note = typeof rawNote === "string" ? rawNote.trim().slice(0, MAX_NOTE_LENGTH) : "";
   const data = Buffer.from(await image.arrayBuffer()).toString("base64");
-
-  return analyzeMeal({ data, mediaType: image.type, note });
+  return analyzeMeal({ source: { type: "base64", media_type: image.type, data }, note });
 }
 
 async function analyzeMeal(input: {
-  data: string;
-  mediaType: ImageType;
+  source: Anthropic.ImageBlockParam["source"];
   note: string;
 }): Promise<MealResult> {
-  const response = await getAnthropic().messages.parse({
+  const request = {
     model: CLAUDE_MODEL,
     max_tokens: 16000,
     system: SYSTEM_PROMPT,
@@ -74,14 +98,11 @@ async function analyzeMeal(input: {
     output_config: { format: zodOutputFormat(MealAnalysisSchema) },
     messages: [
       {
-        role: "user",
+        role: "user" as const,
         content: [
+          { type: "image" as const, source: input.source },
           {
-            type: "image",
-            source: { type: "base64", media_type: input.mediaType, data: input.data },
-          },
-          {
-            type: "text",
+            type: "text" as const,
             text: input.note
               ? `Mô tả thêm của người dùng:\n${input.note}`
               : "Người dùng không mô tả thêm.",
@@ -89,7 +110,23 @@ async function analyzeMeal(input: {
         ],
       },
     ],
-  });
+  };
+
+  let response;
+  try {
+    response = await getAnthropic().messages.parse(request);
+  } catch (error) {
+    // For a web image, a 400 almost always means Anthropic couldn't download it
+    // (hotlink protection, login wall, not an image, too large…).
+    if (input.source.type === "url" && error instanceof Anthropic.BadRequestError) {
+      console.error("[meals/analyze] image URL rejected:", error.message);
+      throw new MealAnalysisError(
+        "Không tải được ảnh từ trang web này. Bạn lưu ảnh về máy rồi chọn lại nhé.",
+        422,
+      );
+    }
+    throw error;
+  }
 
   if (response.stop_reason === "refusal") {
     throw new MealAnalysisError("AI không thể phân tích ảnh này, bạn thử ảnh khác nhé.", 422);
