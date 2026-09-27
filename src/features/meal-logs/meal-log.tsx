@@ -14,7 +14,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
  * (only the browser knows the user's "today").
  */
 export async function MealLog({ searchParams }: { searchParams: SearchParams }) {
-  const user = await requireUser("/meals");
+  const user = await requireUser("/meal-logs");
   const parsed = DateRangeSchema.safeParse({ from: searchParams.from, to: searchParams.to });
   const range = parsed.success ? parsed.data : null; // invalid range → default view
 

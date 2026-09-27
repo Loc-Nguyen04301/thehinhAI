@@ -3,6 +3,8 @@ import type { NavIcon } from "@/lib/site";
 const paths: Record<NavIcon, React.ReactNode> = {
   home: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
   dumbbell: <path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11" />,
+  // fork + knife
+  utensils: <path d="M4.5 3v5.5a2.5 2.5 0 0 0 5 0V3M7 3v18M19 21V3c-2.2 1.2-3.5 3.6-3.5 7v4H19" />,
   camera: (
     <>
       <path d="M4 7.5h3l2-3h6l2 3h3a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1z" />

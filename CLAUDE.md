@@ -98,10 +98,11 @@ src/
   app/                      # Chỉ routing: page/layout/route mỏng, gọi sang features/
     layout.tsx              # Font, metadata, header + footer + thanh tab dưới (mobile)
     error.tsx               # Trang lỗi chung (VD mất kết nối DB)
-    page.tsx                # Trang chủ (hero + slogan + 3 tính năng + bài mới)
+    page.tsx                # Trang chủ (hero + slogan + 4 tính năng + bài mới)
     login/, register/       # Đăng nhập / đăng ký (?next=/duong-dan để quay lại)
     workouts/page.tsx       # Nhật ký tập (cần đăng nhập)
-    meals/page.tsx          # Đo kcal AI + Nhật ký ăn bên dưới (cần đăng nhập)
+    meal-logs/page.tsx      # Nhật ký ăn — tự nhập kcal, không AI (cần đăng nhập)
+    meals/page.tsx          # Đo kcal AI (cần đăng nhập)
     admin/                  # Trang quản trị: users/, users/[id]/ (chỉ staff)
     blog/page.tsx, blog/[slug]/page.tsx
     api/auth/[...all]/route.ts  # Toàn bộ endpoint Better Auth
@@ -126,7 +127,7 @@ src/
     anthropic.ts, blog.ts   # (server)
 ```
 
-Menu (desktop + tab dưới trên mobile) lấy từ `siteConfig.nav`; thêm trang mới thì thêm vào đó và thêm icon trong `components/icons.tsx`.
+Menu (desktop + tab dưới trên mobile) lấy từ `siteConfig.nav`; thêm trang mới thì thêm vào đó và thêm icon trong `components/icons.tsx`. Thanh tab dưới tự chia đều cột theo số mục (`grid-flow-col auto-cols-fr`), không cần sửa số cột.
 
 Quy ước: code của một tính năng nằm trong `src/features/<tên>/`; file trong `app/` chỉ import và render.
 
@@ -153,7 +154,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 | Collection | Trường | Index | Định nghĩa |
 | --- | --- | --- | --- |
 | `workouts` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `exercise`, `muscleGroup`, `sets` (mảng 1–`MAX_SETS` (= 20) phần tử `{ reps, weightKg }`, mỗi hiệp một phần tử, `weightKg: 0` = tự trọng), `note?`, `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `WorkoutDoc` trong `features/workouts/repository.ts`; ràng buộc giá trị: `WorkoutInputSchema` (zod) trong `types.ts` |
-| `mealLogs` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `name` (tên món), `grams` (số nguyên 1–5000), `kcal` (số nguyên 0–5000, người dùng tự nhập), `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `MealLogDoc` trong `features/meal-logs/repository.ts`; ràng buộc giá trị: `MealLogInputSchema` (zod) trong `types.ts` |
+| `mealLogs` | `_id`, `userId` (ObjectId → `user._id`), `date` (chuỗi `YYYY-MM-DD`, ngày theo giờ người dùng), `name` (tên món), `grams` (số nguyên 1–5000), `kcal` (số nguyên 0–5000, người dùng tự nhập), `note?` (≤ 200 ký tự), `createdAt` (Date), `updatedAt?` (Date, có khi đã sửa) | `{ userId: 1, date: -1, createdAt: -1 }` | Kiểu `MealLogDoc` trong `features/meal-logs/repository.ts`; ràng buộc giá trị: `MealLogInputSchema` (zod) trong `types.ts` |
 
 - Thêm collection mới: khai báo kiểu document + hàm truy vấn trong `features/<tên>/repository.ts` (`import "server-only"`), schema zod cho input trong `types.ts`, tạo index ngay trong repository (xem `workouts()`), rồi bổ sung bảng trên.
 - Ví dụ truy vấn trên Atlas (Aggregations): tổng số hiệp và khối lượng tập theo user — `$unwind` mảng `sets` để tính trên từng hiệp
@@ -172,7 +173,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 
 ### 0. Xác thực & phân quyền
 - **Better Auth** lưu user/session/account trong MongoDB (collection `user`, `session`, `account`, `verification` — tự tạo, không cần migrate). Phiên đăng nhập = cookie chứa mã phiên, dữ liệu phiên nằm trong DB.
-- Công khai: trang chủ, blog, đăng nhập/đăng ký. **Cần đăng nhập**: `/workouts`, `/meals`, `POST /api/meals/analyze`. **Chỉ staff**: `/admin/*`.
+- Công khai: trang chủ, blog, đăng nhập/đăng ký. **Cần đăng nhập**: `/workouts`, `/meal-logs`, `/meals`, `POST /api/meals/analyze`. **Chỉ staff**: `/admin/*`.
 - Role (định nghĩa ở `lib/permissions.ts`):
 
   | Role | Nhãn | Quyền |
@@ -213,11 +214,12 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - Lỗi hiển thị cho người dùng: ném `MealAnalysisError(message, status)`; lỗi SDK (rate limit, 5xx) được `mealErrorResponse()` chuyển thành câu tiếng Việt.
 - Khi thêm field kết quả: sửa **2 chỗ** — `schema.ts` (zod) và UI `meal-result.tsx`.
 
-### 3. Nhật ký ăn (`/meals`, phần dưới "Đo kcal bằng ảnh")
-- **Không dùng AI**: người dùng tự nhập mỗi món = ngày, tên món, khối lượng (g), kcal. Hệ thống chỉ cộng **tổng kcal theo ngày** (`totalKcal()` trong `types.ts`). Vì số liệu do người dùng tự nhập nên **không** kèm câu "AI ước tính".
+### 3. Nhật ký ăn (`/meal-logs`)
+- Trang và mục menu **riêng**, tách khỏi "Đo kcal AI" (`/meals`) — đừng gộp lại vào chung một trang.
+- **Không dùng AI**: người dùng tự nhập mỗi món = ngày, tên món, khối lượng (g), kcal, ghi chú (không bắt buộc; xoá ghi chú khi sửa sẽ `$unset` trường `note`). Hệ thống chỉ cộng **tổng kcal theo ngày** (`totalKcal()` trong `types.ts`). Vì số liệu do người dùng tự nhập nên **không** kèm câu "AI ước tính".
 - Cùng khuôn với Nhật ký tập: `meal-log.tsx` (Server Component) đọc DB → `MealLogClient`; Server Actions `addMealLogAction` / `updateMealLogAction` / `removeMealLogAction` (kiểm tra session + zod) → `refresh()`; `useOptimistic` cho cập nhật tức thì; sửa bằng popup `EditMealLogDialog` (`<dialog>`); mọi truy vấn lọc theo `userId`.
 - Giao diện: thẻ "Tổng kcal hôm nay" trên cùng → form "Ghi món ăn" (lưu xong giữ ngày, xoá các ô còn lại) → "Lịch sử ăn uống" nhóm theo ngày, mỗi ngày ghi "N món · Tổng X kcal". Ô tên món gợi ý các món đã ghi trước đó (`<datalist>`).
-- **Lọc lịch sử theo khoảng ngày** ("Từ ngày – Đến ngày" + nút Xem, component `RangeFilter`): khoảng nằm trên URL `/meals?from=YYYY-MM-DD&to=YYYY-MM-DD` (đổi bằng `router.push(..., { scroll: false })` trong `useTransition` → nút hiện "Đang tải…"). Thẻ trên đầu lịch sử hiện **tổng kcal của khoảng**, số món, số ngày có ghi; danh sách chỉ hiện các ngày trong khoảng.
+- **Lọc lịch sử theo khoảng ngày** ("Từ ngày – Đến ngày" + nút Xem, component `RangeFilter`): khoảng nằm trên URL `/meal-logs?from=YYYY-MM-DD&to=YYYY-MM-DD` (đổi bằng `router.push(..., { scroll: false })` trong `useTransition` → nút hiện "Đang tải…"). Thẻ trên đầu lịch sử hiện **tổng kcal của khoảng**, số món, số ngày có ghi; danh sách chỉ hiện các ngày trong khoảng.
   - Server (`meal-log.tsx`) kiểm tra khoảng bằng `DateRangeSchema` (from ≤ to, tối đa `MAX_RANGE_DAYS` = 366 ngày; sai → coi như không lọc), tải **các món trong khoảng** (tối đa 3000, vượt thì báo tổng có thể thiếu) **gộp với 300 món gần nhất** (cần cho "Tổng kcal hôm nay" và gợi ý tên món).
   - Không có `from`/`to` → mặc định **7 ngày gần nhất**, tính ở client (server không biết "hôm nay" của người dùng) và lọc trên 300 món gần nhất.
 - Lưu ở collection `mealLogs` (xem mục **Cơ sở dữ liệu**).

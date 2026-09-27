@@ -37,7 +37,8 @@ export function MobileNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <ul className="grid grid-cols-4">
+      {/* One equal-width column per item, however many items siteConfig.nav has */}
+      <ul className="grid auto-cols-fr grid-flow-col">
         {siteConfig.nav.map((item) => {
           const active = isActive(pathname, item.href);
           return (
@@ -45,7 +46,7 @@ export function MobileNav() {
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
+                className={`flex flex-col items-center gap-1 py-2.5 text-center text-[11px] font-medium ${
                   active ? "text-brand" : "text-muted"
                 }`}
               >

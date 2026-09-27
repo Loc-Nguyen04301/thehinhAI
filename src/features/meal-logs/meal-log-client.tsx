@@ -282,6 +282,7 @@ function MealLogForm({
       name: data.get("name"),
       grams: data.get("grams"),
       kcal: data.get("kcal"),
+      note: data.get("note") || undefined,
     });
     if (!parsed.success) {
       setError(firstIssueMessage(parsed.error));
@@ -291,7 +292,7 @@ function MealLogForm({
     onSubmit(parsed.data);
     if (!initial) {
       // Create form: keep the date for the next food of the same day.
-      for (const name of ["name", "grams", "kcal"]) {
+      for (const name of ["name", "grams", "kcal", "note"]) {
         (form.elements.namedItem(name) as HTMLInputElement).value = "";
       }
     }
@@ -368,6 +369,17 @@ function MealLogForm({
           />
         </label>
       </div>
+
+      <label className="block space-y-1">
+        <span className="text-sm text-muted">Ghi chú (không bắt buộc)</span>
+        <input
+          name="note"
+          maxLength={200}
+          placeholder="VD: bữa trưa, ít cơm"
+          defaultValue={initial?.note}
+          className={inputClass}
+        />
+      </label>
 
       {shownError && (
         <p role="alert" className="text-sm text-danger">
@@ -623,6 +635,9 @@ function MealLogItem({
         <span className="min-w-0">
           <span className="block truncate font-medium">{entry.name}</span>
           <span className="block text-sm text-muted">{numberFormat.format(entry.grams)} g</span>
+          {entry.note && (
+            <span className="mt-0.5 block text-sm wrap-break-word italic text-muted">{entry.note}</span>
+          )}
         </span>
         <span className="shrink-0 font-semibold">{numberFormat.format(entry.kcal)} kcal</span>
       </button>

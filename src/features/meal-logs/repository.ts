@@ -41,6 +41,7 @@ function toEntry(doc: MealLogDoc): MealLogEntry {
     name: doc.name,
     grams: doc.grams,
     kcal: doc.kcal,
+    ...(doc.note ? { note: doc.note } : {}),
     createdAt: doc.createdAt.getTime(),
   };
 }
@@ -63,9 +64,11 @@ export async function listMealLogs(
 }
 
 export async function insertMealLog(userId: string, input: MealLogInput): Promise<MealLogEntry> {
+  const { note, ...rest } = input;
   const doc: MealLogDoc = {
     _id: new ObjectId(),
-    ...input,
+    ...rest,
+    ...(note ? { note } : {}),
     userId: userObjectId(userId),
     createdAt: new Date(),
   };
@@ -81,9 +84,13 @@ export async function updateMealLog(
 ): Promise<boolean> {
   const mealLogId = toObjectId(id);
   if (!mealLogId) return false;
+  const { note, ...rest } = input;
   const result = await (await mealLogs()).updateOne(
     { _id: mealLogId, userId: userObjectId(userId) },
-    { $set: { ...input, updatedAt: new Date() } },
+    {
+      $set: { ...rest, ...(note ? { note } : {}), updatedAt: new Date() },
+      ...(note ? {} : { $unset: { note: "" } }), // note cleared in the form
+    },
   );
   return result.matchedCount === 1;
 }

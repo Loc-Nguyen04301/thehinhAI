@@ -14,6 +14,7 @@ export const MealLogInputSchema = z.object({
     .int("Kcal phải là số nguyên")
     .min(0, "Kcal không được âm")
     .max(5000, "Kcal tối đa 5000"),
+  note: z.string().trim().max(200, "Ghi chú tối đa 200 ký tự").optional(),
 });
 
 export type MealLogInput = z.infer<typeof MealLogInputSchema>;

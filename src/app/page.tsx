@@ -20,6 +20,12 @@ const features: { href: string; icon: NavIcon; title: string; description: strin
     description: "Ghi bài tập, số hiệp, số lần, mức tạ ngay tại phòng gym và xem tiến bộ.",
   },
   {
+    href: "/meal-logs",
+    icon: "utensils",
+    title: "Nhật ký ăn",
+    description: "Ghi món ăn, khối lượng, kcal và xem tổng kcal mỗi ngày hoặc theo khoảng ngày.",
+  },
+  {
     href: "/blog",
     icon: "book",
     title: "Blog thể hình",
@@ -79,7 +85,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2">
         {features.map((feature) => (
           <Link
             key={feature.href}

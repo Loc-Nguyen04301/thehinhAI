@@ -16,6 +16,7 @@ export const siteConfig = {
   nav: [
     { href: "/", label: "Trang chủ", icon: "home" },
     { href: "/workouts", label: "Nhật ký tập", icon: "dumbbell" },
+    { href: "/meal-logs", label: "Nhật ký ăn", icon: "utensils" },
     { href: "/meals", label: "Đo kcal AI", icon: "camera" },
     { href: "/blog", label: "Blog", icon: "book" },
   ],
