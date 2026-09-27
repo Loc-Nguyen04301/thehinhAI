@@ -1,7 +1,8 @@
 import "server-only";
 import { ObjectId, type Collection } from "mongodb";
+import type { DateRange } from "@/lib/date-range";
 import { getDb, toObjectId } from "@/lib/db";
-import type { DateRange, MealLogEntry, MealLogInput } from "./types";
+import type { MealLogEntry, MealLogInput } from "./types";
 
 // MongoDB access for the daily kcal log. Callers must pass the *signed-in* user's id —
 // every query is scoped by userId so nobody can read or delete another user's data.

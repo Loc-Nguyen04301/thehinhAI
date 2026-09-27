@@ -1,32 +1,27 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
-import { addDays, formatDay, formatShortDay, numberFormat, useToday } from "@/lib/date";
+import {
+  DateRangeFilter,
+  TruncatedRangeNote,
+  isInRange,
+  rangeLabel,
+  shownRange,
+  useRangeNavigation,
+} from "@/components/date-range-filter";
+import { formatDay, groupByDate, numberFormat, useToday } from "@/lib/date";
+import type { DateRange } from "@/lib/date-range";
 import { addMealLogAction, removeMealLogAction, updateMealLogAction } from "./actions";
 import {
-  DateRangeSchema,
   MealLogInputSchema,
   firstIssueMessage,
   totalKcal,
-  type DateRange,
   type MealLogEntry,
   type MealLogInput,
 } from "./types";
 
-/** History shows this many days (ending today) until the user picks a range. */
-const DEFAULT_RANGE_DAYS = 7;
-
 /** An entry as shown on screen; `pending` = change not yet confirmed by the server. */
 type DisplayEntry = MealLogEntry & { pending?: boolean };
-
-function groupByDate(entries: DisplayEntry[]): [string, DisplayEntry[]][] {
-  const groups = new Map<string, DisplayEntry[]>();
-  for (const entry of entries) {
-    groups.set(entry.date, [...(groups.get(entry.date) ?? []), entry]);
-  }
-  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
-}
 
 type OptimisticAction =
   | { type: "add"; entry: DisplayEntry }
@@ -77,10 +72,6 @@ export function MealLogClient({
   // Looked up by id so the dialog closes by itself if the entry disappears
   const editingEntry = optimisticEntries.find((entry) => entry.id === editingId);
   const todayEntries = optimisticEntries.filter((entry) => entry.date === today);
-  const shownRange = range ?? { from: addDays(today, 1 - DEFAULT_RANGE_DAYS), to: today };
-  const rangeEntries = optimisticEntries.filter(
-    (entry) => entry.date >= shownRange.from && entry.date <= shownRange.to,
-  );
 
   function handleAdd(input: MealLogInput) {
     setAddError(null);
@@ -140,9 +131,8 @@ export function MealLogClient({
       ) : (
         <MealLogHistory
           today={today}
-          range={shownRange}
-          isDefaultRange={!range}
-          entries={rangeEntries}
+          range={range}
+          entries={optimisticEntries}
           truncated={truncated}
           error={historyError}
           onEdit={(entry) => {
@@ -412,7 +402,6 @@ function MealLogForm({
 function MealLogHistory({
   today,
   range,
-  isDefaultRange,
   entries,
   truncated,
   error,
@@ -420,31 +409,18 @@ function MealLogHistory({
   onRemove,
 }: {
   today: string;
-  range: DateRange;
-  isDefaultRange: boolean;
+  /** From the URL; null = last 7 days. */
+  range: DateRange | null;
   entries: DisplayEntry[];
   truncated: boolean;
   error?: string | null;
   onEdit: (entry: MealLogEntry) => void;
   onRemove: (entry: MealLogEntry) => void;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [loading, startLoading] = useTransition();
-  const days = groupByDate(entries);
-
-  // The range lives in the URL (?from=&to=) so the server can load older days.
-  // Inside a transition, `loading` stays true until the new data has arrived.
-  function showRange(next: DateRange | null) {
-    const url = next ? `${pathname}?${new URLSearchParams(next)}` : pathname;
-    startLoading(() => router.push(url, { scroll: false }));
-  }
-
-  const rangeLabel = isDefaultRange
-    ? `${DEFAULT_RANGE_DAYS} ngày gần nhất`
-    : range.from === range.to
-      ? formatShortDay(range.from)
-      : `${formatShortDay(range.from)} – ${formatShortDay(range.to)}`;
+  const { loading, showRange } = useRangeNavigation();
+  const shown = shownRange(range, today);
+  const inRange = entries.filter((entry) => isInRange(entry.date, shown));
+  const days = groupByDate(inRange);
 
   return (
     <div className="space-y-6">
@@ -455,43 +431,24 @@ function MealLogHistory({
         </p>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 md:p-6">
-        <RangeFilter
-          key={`${range.from}_${range.to}`} // reset the inputs when the URL changes (back button)
-          today={today}
-          range={range}
-          loading={loading}
-          onApply={showRange}
-          onReset={isDefaultRange ? undefined : () => showRange(null)}
-        />
-        <div
-          aria-live="polite"
-          aria-busy={loading}
-          className={`flex items-end justify-between gap-3 border-t border-border pt-4 transition-opacity ${
-            loading ? "opacity-60" : ""
-          }`}
-        >
+      <DateRangeFilter today={today} range={range} loading={loading} onChange={showRange}>
+        <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-muted">Tổng kcal · {rangeLabel}</p>
+            <p className="text-sm text-muted">Tổng kcal · {rangeLabel(range)}</p>
             <p className="text-3xl font-extrabold text-brand">
-              {numberFormat.format(totalKcal(entries))}{" "}
+              {numberFormat.format(totalKcal(inRange))}{" "}
               <span className="text-base font-semibold">kcal</span>
             </p>
           </div>
           <p className="shrink-0 text-right text-sm text-muted">
-            {entries.length} món
+            {inRange.length} món
             <br />
             {days.length} ngày có ghi
           </p>
         </div>
-      </section>
+      </DateRangeFilter>
 
-      {truncated && (
-        <p className="text-sm text-muted">
-          Khoảng này có quá nhiều món nên chỉ hiện một phần, tổng kcal có thể bị thiếu. Bạn chọn
-          khoảng ngắn hơn nhé.
-        </p>
-      )}
+      {truncated && <TruncatedRangeNote />}
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}
@@ -525,91 +482,6 @@ function MealLogHistory({
         )}
       </div>
     </div>
-  );
-}
-
-/** "Từ ngày – Đến ngày" picker. Validated with DateRangeSchema before changing the URL. */
-function RangeFilter({
-  today,
-  range,
-  loading,
-  onApply,
-  onReset,
-}: {
-  today: string;
-  range: DateRange;
-  loading: boolean;
-  onApply: (range: DateRange) => void;
-  onReset?: () => void;
-}) {
-  const [from, setFrom] = useState(range.from);
-  const [to, setTo] = useState(range.to);
-  const [error, setError] = useState<string | null>(null);
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = DateRangeSchema.safeParse({ from, to });
-    if (!parsed.success) {
-      setError(firstIssueMessage(parsed.error));
-      return;
-    }
-    setError(null);
-    onApply(parsed.data);
-  }
-
-  return (
-    // noValidate: show our Vietnamese messages; min/max still grey out days in the picker
-    <form onSubmit={handleSubmit} noValidate className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-1">
-          <span className="text-sm text-muted">Từ ngày</span>
-          <input
-            type="date"
-            value={from}
-            max={to || today}
-            onChange={(e) => setFrom(e.target.value)}
-            className={inputClass}
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm text-muted">Đến ngày</span>
-          <input
-            type="date"
-            value={to}
-            min={from || undefined}
-            max={today}
-            onChange={(e) => setTo(e.target.value)}
-            className={inputClass}
-          />
-        </label>
-      </div>
-
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
-
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex-1 rounded-xl border border-brand py-2.5 font-semibold text-brand transition-colors hover:bg-brand/10 disabled:opacity-60"
-        >
-          {loading ? "Đang tải…" : "Xem"}
-        </button>
-        {onReset && (
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={loading}
-            className="shrink-0 rounded-xl px-3 py-2.5 text-sm text-muted transition-colors hover:text-brand disabled:opacity-60"
-          >
-            {DEFAULT_RANGE_DAYS} ngày gần nhất
-          </button>
-        )}
-      </div>
-    </form>
   );
 }
 

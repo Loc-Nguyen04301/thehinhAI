@@ -29,7 +29,7 @@ export async function UserDetail({ id }: { id: string }) {
   const canBan = manageable && hasPermission(actor.role, { user: ["ban"] });
   const canViewWorkouts = hasPermission(actor.role, { workout: ["view-any"] });
   const [workouts, workoutCount] = canViewWorkouts
-    ? await Promise.all([listWorkouts(user.id, 50), countWorkouts(user.id)])
+    ? await Promise.all([listWorkouts(user.id, { limit: 50 }), countWorkouts(user.id)])
     : [[], 0];
 
   return (

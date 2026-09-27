@@ -1,7 +1,16 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
-import { formatDay, numberFormat, useToday } from "@/lib/date";
+import {
+  DateRangeFilter,
+  TruncatedRangeNote,
+  isInRange,
+  rangeLabel,
+  shownRange,
+  useRangeNavigation,
+} from "@/components/date-range-filter";
+import { formatDay, groupByDate, numberFormat, useToday } from "@/lib/date";
+import type { DateRange } from "@/lib/date-range";
 import { addWorkoutAction, removeWorkoutAction, updateWorkoutAction } from "./actions";
 import {
   COMMON_EXERCISES,
@@ -17,14 +26,6 @@ import {
 
 /** An entry as shown on screen; `pending` = change not yet confirmed by the server. */
 type DisplayEntry = WorkoutEntry & { pending?: boolean };
-
-function groupByDate(entries: DisplayEntry[]): [string, DisplayEntry[]][] {
-  const groups = new Map<string, DisplayEntry[]>();
-  for (const entry of entries) {
-    groups.set(entry.date, [...(groups.get(entry.date) ?? []), entry]);
-  }
-  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
-}
 
 type OptimisticAction =
   | { type: "add"; entry: DisplayEntry }
@@ -43,7 +44,16 @@ function applyChange(state: DisplayEntry[], action: OptimisticAction): DisplayEn
 }
 
 /** The signed-in user's own log: form + editable history. `entries` come from the server. */
-export function WorkoutLogClient({ entries }: { entries: WorkoutEntry[] }) {
+export function WorkoutLogClient({
+  entries,
+  range,
+  truncated,
+}: {
+  entries: WorkoutEntry[];
+  /** From the URL; null = last 7 days. `entries` covers it and today. */
+  range: DateRange | null;
+  truncated: boolean;
+}) {
   const today = useToday();
   const [addError, setAddError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -116,16 +126,25 @@ export function WorkoutLogClient({ entries }: { entries: WorkoutEntry[] }) {
         serverError={addError}
         onSubmit={handleAdd}
       />
-      <WorkoutHistory
-        today={today}
-        entries={optimisticEntries}
-        error={historyError}
-        onEdit={(entry) => {
-          setHistoryError(null);
-          setEditingId(entry.id);
-        }}
-        onRemove={handleRemove}
-      />
+      {/* `entries` always includes the latest workouts, so empty = nothing logged yet */}
+      {optimisticEntries.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border p-6 text-center text-muted">
+          Chưa có bài tập nào. Ghi bài đầu tiên để bắt đầu theo dõi tiến bộ nhé!
+        </p>
+      ) : (
+        <WorkoutLogHistory
+          today={today}
+          range={range}
+          entries={optimisticEntries}
+          truncated={truncated}
+          error={historyError}
+          onEdit={(entry) => {
+            setHistoryError(null);
+            setEditingId(entry.id);
+          }}
+          onRemove={handleRemove}
+        />
+      )}
       {editingEntry && (
         <EditWorkoutDialog
           key={editingEntry.id}
@@ -207,7 +226,14 @@ function EditWorkoutDialog({
 export function WorkoutHistoryReadOnly({ entries }: { entries: WorkoutEntry[] }) {
   const today = useToday();
   if (!today) return <div className="h-40 animate-pulse rounded-2xl bg-card" aria-busy="true" />;
-  return <WorkoutHistory today={today} entries={entries} />;
+  if (entries.length === 0) {
+    return (
+      <p className="rounded-2xl border border-dashed border-border p-6 text-center text-muted">
+        Chưa có bài tập nào.
+      </p>
+    );
+  }
+  return <WorkoutDays today={today} entries={entries} />;
 }
 
 const inputClass =
@@ -455,44 +481,92 @@ function groupSets(sets: WorkoutSet[]): { label: string; set: WorkoutSet }[] {
   }));
 }
 
-function WorkoutHistory({
+/** The user's own history of one date range: range picker + the range's totals + the days. */
+function WorkoutLogHistory({
   today,
+  range,
   entries,
+  truncated,
   error,
   onEdit,
   onRemove,
 }: {
   today: string;
+  /** From the URL; null = last 7 days. */
+  range: DateRange | null;
   entries: DisplayEntry[];
+  truncated: boolean;
   error?: string | null;
-  onEdit?: (entry: WorkoutEntry) => void;
-  onRemove?: (entry: WorkoutEntry) => void;
+  onEdit: (entry: WorkoutEntry) => void;
+  onRemove: (entry: WorkoutEntry) => void;
 }) {
-  const editable = Boolean(onEdit && onRemove);
-
-  if (entries.length === 0) {
-    return (
-      <p className="rounded-2xl border border-dashed border-border p-6 text-center text-muted">
-        {editable
-          ? "Chưa có bài tập nào. Ghi bài đầu tiên để bắt đầu theo dõi tiến bộ nhé!"
-          : "Chưa có bài tập nào."}
-      </p>
-    );
-  }
+  const { loading, showRange } = useRangeNavigation();
+  const shown = shownRange(range, today);
+  const inRange = entries.filter((entry) => isInRange(entry.date, shown));
+  const dayCount = new Set(inRange.map((entry) => entry.date)).size;
+  const setCount = inRange.reduce((sum, entry) => sum + entry.sets.length, 0);
+  const totalVolume = inRange.reduce((sum, entry) => sum + volumeOf(entry), 0);
 
   return (
     <div className="space-y-6">
-      {editable && (
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold">Lịch sử tập</h2>
-          <p className="text-sm text-muted">Chạm vào một bài để sửa.</p>
+      <div className="space-y-1">
+        <h2 className="text-lg font-bold">Lịch sử tập</h2>
+        <p className="text-sm text-muted">
+          Chọn khoảng ngày để xem lịch tập. Chạm vào một bài để sửa.
+        </p>
+      </div>
+
+      <DateRangeFilter today={today} range={range} loading={loading} onChange={showRange}>
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-muted">Tổng khối lượng · {rangeLabel(range)}</p>
+            <p className="text-3xl font-extrabold text-brand">
+              {numberFormat.format(totalVolume)}{" "}
+              <span className="text-base font-semibold">kg</span>
+            </p>
+          </div>
+          <p className="shrink-0 text-right text-sm text-muted">
+            {inRange.length} bài · {setCount} hiệp
+            <br />
+            {dayCount} ngày tập
+          </p>
         </div>
-      )}
+      </DateRangeFilter>
+
+      {truncated && <TruncatedRangeNote />}
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
+
+      <div className={`transition-opacity ${loading ? "opacity-60" : ""}`}>
+        {inRange.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border p-6 text-center text-muted">
+            Không có buổi tập nào trong khoảng ngày này.
+          </p>
+        ) : (
+          <WorkoutDays today={today} entries={inRange} onEdit={onEdit} onRemove={onRemove} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Entries grouped by day, newest first. Editable when onEdit/onRemove are given. */
+function WorkoutDays({
+  today,
+  entries,
+  onEdit,
+  onRemove,
+}: {
+  today: string;
+  entries: DisplayEntry[];
+  onEdit?: (entry: WorkoutEntry) => void;
+  onRemove?: (entry: WorkoutEntry) => void;
+}) {
+  return (
+    <div className="space-y-6">
       {groupByDate(entries).map(([date, items]) => {
         const totalVolume = items.reduce((sum, e) => sum + volumeOf(e), 0);
         return (

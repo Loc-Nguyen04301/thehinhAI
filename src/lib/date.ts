@@ -52,3 +52,12 @@ export function formatDay(date: string, today: string): string {
 export function formatShortDay(date: string): string {
   return shortDayFormat.format(parseDay(date));
 }
+
+/** Entries grouped per day, newest day first; each day keeps the entries' order. */
+export function groupByDate<T extends { date: string }>(entries: T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const entry of entries) {
+    groups.set(entry.date, [...(groups.get(entry.date) ?? []), entry]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
+}

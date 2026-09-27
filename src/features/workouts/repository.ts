@@ -1,5 +1,6 @@
 import "server-only";
 import { ObjectId, type Collection } from "mongodb";
+import type { DateRange } from "@/lib/date-range";
 import { getDb, toObjectId } from "@/lib/db";
 import type { WorkoutEntry, WorkoutInput } from "./types";
 
@@ -46,10 +47,17 @@ function toEntry(doc: WorkoutDoc): WorkoutEntry {
   };
 }
 
-/** Newest first. */
-export async function listWorkouts(userId: string, limit = 200): Promise<WorkoutEntry[]> {
+/** Newest first; only days within `range` (inclusive) when given. */
+export async function listWorkouts(
+  userId: string,
+  { range, limit = 200 }: { range?: DateRange; limit?: number } = {},
+): Promise<WorkoutEntry[]> {
   const docs = await (await workouts())
-    .find({ userId: userObjectId(userId) })
+    .find({
+      userId: userObjectId(userId),
+      // YYYY-MM-DD strings sort like dates, so plain string bounds work (and use the index)
+      ...(range ? { date: { $gte: range.from, $lte: range.to } } : {}),
+    })
     .sort({ date: -1, createdAt: -1 })
     .limit(limit)
     .toArray();

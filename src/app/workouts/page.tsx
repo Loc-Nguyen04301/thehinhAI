@@ -7,14 +7,14 @@ export const metadata: Metadata = {
   description: "Ghi lại bài tập, số hiệp, số lần và mức tạ để theo dõi tiến bộ mỗi ngày.",
 };
 
-export default function WorkoutsPage() {
+export default async function WorkoutsPage(props: PageProps<"/workouts">) {
   return (
     <div className="space-y-6">
       <PageHeading
         title="Nhật ký tập"
         subtitle="Ghi nhanh từng bài ngay tại phòng tập. Dữ liệu được lưu vào tài khoản của bạn."
       />
-      <WorkoutLog />
+      <WorkoutLog searchParams={await props.searchParams} />
     </div>
   );
 }

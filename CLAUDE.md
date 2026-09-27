@@ -108,7 +108,7 @@ src/
     api/auth/[...all]/route.ts  # Toàn bộ endpoint Better Auth
     api/meals/analyze/route.ts  # POST ảnh + ghi chú → JSON dinh dưỡng (cần đăng nhập)
     icon.png, apple-icon.png    # Icon tab / màn hình chính
-  components/               # UI dùng chung: site-header (Wordmark; 3 vùng: chữ logo trái – menu giữa – nút sáng/tối + tài khoản phải), site-footer, nav-links (menu desktop + tab mobile), user-menu, theme-toggle, icons, page-heading, post-card
+  components/               # UI dùng chung: site-header (Wordmark; 3 vùng: chữ logo trái – menu giữa – nút sáng/tối + tài khoản phải), site-footer, nav-links (menu desktop + tab mobile), user-menu, theme-toggle, icons, page-heading, post-card, date-range-filter (bộ chọn "Từ ngày – Đến ngày" cho lịch sử các nhật ký)
   features/                 # Logic theo tính năng
     auth/                   # auth-form.tsx (đăng nhập/đăng ký/Google)
     admin/                  # users-list, user-detail (server), user-actions (client), actions.ts (Server Actions), badges
@@ -118,7 +118,8 @@ src/
   lib/
     site.ts                 # Tên, slogan, logo, menu
     theme.ts                # Giao diện sáng/tối: key localStorage, script chống nháy, setTheme()
-    date.ts                 # useToday(), formatDay() ("Hôm nay"/"Hôm qua"…), formatShortDay(), addDays(), numberFormat — dùng chung cho các nhật ký (chỉ import từ client)
+    date.ts                 # useToday(), formatDay() ("Hôm nay"/"Hôm qua"…), formatShortDay(), addDays(), groupByDate(), numberFormat — dùng chung cho các nhật ký (chỉ import từ client)
+    date-range.ts           # Lọc lịch sử theo khoảng ngày: DateRangeSchema, parseDateRange(), loadRecentAndRange() (server + client)
     permissions.ts          # Role & quyền (dùng chung server + client)
     auth.ts                 # Cấu hình Better Auth (server) — getAuth()
     auth-client.ts          # authClient cho component "use client" (useSession, signIn…)
@@ -191,6 +192,16 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - Trong `getSession()` phải `await headers()` **trước** khi gọi `getAuth()`, nếu không `next build` sẽ cố kết nối DB khi prerender.
 - Better Auth có sẵn rate limit cho đăng nhập/đăng ký (~3 lần/10 giây/IP).
 
+### Lọc lịch sử theo khoảng ngày (dùng chung: Nhật ký tập + Nhật ký ăn)
+- Lịch sử **không hiện hết**: mặc định **7 ngày gần nhất** (`DEFAULT_RANGE_DAYS`); người dùng chọn "Từ ngày – Đến ngày" + nút Xem để xem khoảng khác. Thẻ bộ lọc hiện số tổng của khoảng (mỗi tính năng tự truyền vào qua `children`), danh sách chỉ hiện các ngày trong khoảng.
+- Khoảng nằm trên URL `?from=YYYY-MM-DD&to=YYYY-MM-DD` (lưu/chia sẻ được, nút Back quay lại khoảng trước). Đổi khoảng bằng `router.push(..., { scroll: false })` trong `useTransition` → nút hiện "Đang tải…", danh sách mờ đi tới khi có dữ liệu mới.
+- Code dùng chung:
+  - `lib/date-range.ts` (server + client): `DateRangeSchema` (from ≤ to, tối đa `MAX_RANGE_DAYS` = 366 ngày), `parseDateRange(searchParams)` (sai → `null` = mặc định), `loadRecentAndRange(list, range)`.
+  - `components/date-range-filter.tsx` (client): `DateRangeFilter` (thẻ + form), `useRangeNavigation()`, `shownRange()`, `rangeLabel()`, `isInRange()`, `TruncatedRangeNote`.
+- Server component (`workout-log.tsx`, `meal-log.tsx`) gọi `loadRecentAndRange`: tải **các mục trong khoảng** (tối đa `MAX_RANGE_ENTRIES` = 3000, vượt thì hiện `TruncatedRangeNote`) **gộp với các mục gần nhất** (cần cho mặc định 7 ngày, "hôm nay" và gợi ý tên). Hàm `list*` trong repository nhận `{ range?, limit? }`.
+- Mặc định 7 ngày được tính ở client (server không biết "hôm nay" của người dùng) và lọc trên các mục gần nhất (200 bài tập / 300 món ăn).
+- Nhật ký mới cần lọc theo ngày: dùng lại đúng bộ này, đừng viết lại.
+
 ### 1. Nhật ký tập (`/workouts`)
 - Mỗi bản ghi = 1 bài tập: ngày, tên bài, nhóm cơ, **danh sách hiệp** (mỗi hiệp có số lần và mức tạ riêng), ghi chú. Khối lượng = Σ (số lần × kg) của các hiệp (`volumeOf()`).
 - Form nhập hiệp (`SetsEditor`): mỗi hiệp một dòng; "+ Thêm hiệp" chép số lần + mức tạ của hiệp trước; nút × xoá hiệp (luôn giữ ít nhất 1). Lỗi của một hiệp hiện kèm số hiệp ("Hiệp 2: …", `firstIssueMessage()`). Sau khi lưu, form giữ số hiệp + số lần, xoá mức tạ.
@@ -201,7 +212,8 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - Form tạo mới và form sửa dùng chung component `WorkoutForm` (có `initial` = chế độ sửa). Xoá ghi chú khi sửa sẽ `$unset` trường `note`.
 - Popup/hộp thoại mới trong dự án: dùng `<dialog>` + `showModal()` như `EditWorkoutDialog`, không tự dựng lớp phủ bằng `div`.
 - **"Hôm nay" chỉ tính ở client** (`useToday()` trong `lib/date.ts`, theo múi giờ người dùng); server không biết múi giờ của người dùng. Không dùng `new Date()` ở server để lấy ngày hiện tại.
-- Staff có quyền `workout:view-any` xem nhật ký của user ở `/admin/users/[id]` (component `WorkoutHistoryReadOnly`).
+- **"Lịch sử tập" lọc theo khoảng ngày** (xem mục chung ở trên, `WorkoutLogHistory`): thẻ tổng hiện **tổng khối lượng (kg)** của khoảng, số bài · số hiệp, số ngày tập. Danh sách theo ngày là `WorkoutDays` (dùng chung với bản chỉ đọc).
+- Staff có quyền `workout:view-any` xem nhật ký của user ở `/admin/users/[id]` (component `WorkoutHistoryReadOnly`: 50 bài gần nhất, không có bộ lọc).
 
 ### 2. Đo kcal bằng ảnh (`/meals`)
 - Chọn ảnh (`meal-analyzer.tsx`): bấm để chụp/chọn ảnh, hoặc **kéo thả** vào khung (máy tính). Khi kéo qua: khung viền xanh + "Thả ảnh vào đây" (đã có ảnh thì "Thả để đổi ảnh"). Có listener `dragover`/`drop` trên `window` để file/link thả trượt ra ngoài khung không làm trình duyệt mở nó và rời trang (trừ khi thả vào ô nhập chữ).
@@ -219,9 +231,7 @@ Database `thehinh-ai` trên Atlas (tên lấy từ `MONGODB_DB`). **Không có f
 - **Không dùng AI**: người dùng tự nhập mỗi món = ngày, tên món, khối lượng (g), kcal, ghi chú (không bắt buộc; xoá ghi chú khi sửa sẽ `$unset` trường `note`). Hệ thống chỉ cộng **tổng kcal theo ngày** (`totalKcal()` trong `types.ts`). Vì số liệu do người dùng tự nhập nên **không** kèm câu "AI ước tính".
 - Cùng khuôn với Nhật ký tập: `meal-log.tsx` (Server Component) đọc DB → `MealLogClient`; Server Actions `addMealLogAction` / `updateMealLogAction` / `removeMealLogAction` (kiểm tra session + zod) → `refresh()`; `useOptimistic` cho cập nhật tức thì; sửa bằng popup `EditMealLogDialog` (`<dialog>`); mọi truy vấn lọc theo `userId`.
 - Giao diện: thẻ "Tổng kcal hôm nay" trên cùng → form "Ghi món ăn" (lưu xong giữ ngày, xoá các ô còn lại) → "Lịch sử ăn uống" nhóm theo ngày, mỗi ngày ghi "N món · Tổng X kcal". Ô tên món gợi ý các món đã ghi trước đó (`<datalist>`).
-- **Lọc lịch sử theo khoảng ngày** ("Từ ngày – Đến ngày" + nút Xem, component `RangeFilter`): khoảng nằm trên URL `/meal-logs?from=YYYY-MM-DD&to=YYYY-MM-DD` (đổi bằng `router.push(..., { scroll: false })` trong `useTransition` → nút hiện "Đang tải…"). Thẻ trên đầu lịch sử hiện **tổng kcal của khoảng**, số món, số ngày có ghi; danh sách chỉ hiện các ngày trong khoảng.
-  - Server (`meal-log.tsx`) kiểm tra khoảng bằng `DateRangeSchema` (from ≤ to, tối đa `MAX_RANGE_DAYS` = 366 ngày; sai → coi như không lọc), tải **các món trong khoảng** (tối đa 3000, vượt thì báo tổng có thể thiếu) **gộp với 300 món gần nhất** (cần cho "Tổng kcal hôm nay" và gợi ý tên món).
-  - Không có `from`/`to` → mặc định **7 ngày gần nhất**, tính ở client (server không biết "hôm nay" của người dùng) và lọc trên 300 món gần nhất.
+- **"Lịch sử ăn uống" lọc theo khoảng ngày** (xem mục chung ở trên, `MealLogHistory`): thẻ tổng hiện **tổng kcal của khoảng**, số món, số ngày có ghi.
 - Lưu ở collection `mealLogs` (xem mục **Cơ sở dữ liệu**).
 
 ### 4. Blog (`/blog`)
