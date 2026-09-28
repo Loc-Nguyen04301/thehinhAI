@@ -11,7 +11,7 @@ Yêu cầu: Node.js 20.9 trở lên.
 ```bash
 npm install
 cp .env.example .env.local   # rồi điền các biến (xem bên dưới)
-npm run dev                  # mở http://localhost:3000
+npm run dev                  # mở http://localhost:5000
 ```
 
 ### 1. MongoDB Atlas (bắt buộc)
@@ -26,13 +26,13 @@ Không cần tạo bảng: collection được tạo tự động khi dùng.
 ### 2. Better Auth (bắt buộc)
 
 - `BETTER_AUTH_SECRET`: chuỗi ngẫu nhiên, tạo bằng `npx @better-auth/cli secret`.
-- `BETTER_AUTH_URL`: `http://localhost:3000` khi phát triển, tên miền thật khi deploy.
+- `BETTER_AUTH_URL`: `http://localhost:5000` khi phát triển, tên miền thật khi deploy.
 
 ### 3. Đăng nhập Google (không bắt buộc)
 
 Tại Google Cloud Console → APIs & Services → Credentials, tạo **OAuth client ID** (loại Web application):
 
-- Authorized redirect URI: `http://localhost:3000/api/auth/callback/google` (và `https://<tên-miền>/api/auth/callback/google` khi deploy).
+- Authorized redirect URI: `http://localhost:5000/api/auth/callback/google` (và `https://<tên-miền>/api/auth/callback/google` khi deploy).
 - Điền `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET`. Bỏ trống thì nút Google sẽ tự ẩn.
 
 ### 4. Claude (cho trang Đo kcal)

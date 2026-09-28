@@ -77,7 +77,7 @@ Khai báo trong `src/app/globals.css`: `:root` = giao diện tối, `:root[data-
 ## Lệnh thường dùng
 
 ```bash
-npm run dev        # http://localhost:3000
+npm run dev        # http://localhost:5000
 npm run build      # build production — chạy trước khi báo "xong"
 npm run lint       # ESLint
 npx next typegen   # sinh type PageProps/LayoutProps/RouteContext (cần trước tsc nếu chưa chạy dev/build)
